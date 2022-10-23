@@ -158,11 +158,10 @@ def get_instance(channel_type, channel_instance_id, instance_type, instance_id=N
     if instance_id is not None:
         criteria['instance_id'] = instance_id
 
-    instance = transactions.find_one(criteria)
-    if not instance:
+    if instance := transactions.find_one(criteria):
+        return _unpack(instance)
+    else:
         return
-
-    return _unpack(instance)
 
 
 def list_instances(channel_type, channel_instance_id, instance_type, operation=None):

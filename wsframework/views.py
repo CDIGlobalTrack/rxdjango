@@ -44,9 +44,7 @@ class CachedSnapshotView(View):
 
         cached = json.loads(cached)
 
-        browser_cache = request.headers.get('If-Modified-Since')
-
-        if browser_cache:
+        if browser_cache := request.headers.get('If-Modified-Since'):
             tstamp = datetime.fromisoformat(browser_cache)
             last_modified = datetime.fromisoformat(cached['last_modified'])
             if last_modified == tstamp:
