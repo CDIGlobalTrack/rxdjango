@@ -17,7 +17,7 @@ serialized will be sent, and subsequent updates will be broadcast to all connect
 Example
 =======
 
-```
+```python
 # chat/channels.py
 class ChatRoomChannel(ModelSetChannel):
     snapshot = ChatRoomSnapshotSerializer
