@@ -77,12 +77,13 @@ class ModelSetChannel:
             self.register_model(Model, Serializer)
 
     @classmethod
-    def as_asgi(klass):
+    def as_asgi(cls):
         Consumer = type(
-            f'{klass.__name__}Consumer',
+            f'{cls.__name__}Consumer',
             (ModelSetConsumer,),
-            dict(model_set_channel=klass),
+            dict(model_set_channel=cls),
         )
+
         return Consumer.as_asgi()
 
     def register_model(self, Model, Serializer):
@@ -101,11 +102,10 @@ class ModelSetChannel:
 
 
     def broadcast_queryset(self, channel_instance, qs, operation='update'):
-        updates = [ self._create_update(i, operation) for i in qs ]
-        if not updates:
+        if updates := [self._create_update(i, operation) for i in qs]:
+            self._broadcast_payload(channel_instance, updates)
+        else:
             return
-
-        self._broadcast_payload(channel_instance, updates)
 
 
     def _create_update(self, instance, operation):
@@ -151,9 +151,7 @@ class ModelSetChannel:
             if not get_user:
                 return
             user_id = get_user(instance)
-            if isinstance(user_id, int):
-                return user_id
-            return user_id.id
+            return user_id if isinstance(user_id, int) else user_id.id
 
         self.serializers[instance_type] = serializer_class
 
@@ -270,7 +268,7 @@ class ModelSetChannel:
         if not self._length(queue):
             # Setup new queue
             transaction_id = get_transaction_id()
-            if not transaction_id == get_transaction_id():
+            if transaction_id != get_transaction_id():
                 raise Exception("Broadcast operation should be inside a "
                                 "transaction.atomic block")
             transaction.on_commit(lambda: self.flush_transaction(channel_instance_id,
@@ -297,7 +295,7 @@ class ModelSetChannel:
         if not size:
             return
         pipe = self._conn.pipeline()
-        for i in range(size):
+        for _ in range(size):
             pipe.lpop(queue)
 
         updates = [json.loads(up) for up in pipe.execute()]

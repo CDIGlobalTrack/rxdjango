@@ -105,8 +105,7 @@ class ModelSetConsumer(AsyncWebsocketConsumer):
             cache_key = f'{prefix}-{pk}'
 
         if cache_key:
-            cached = get_cached(cache_key)
-            if cached:
+            if cached := get_cached(cache_key):
                 data = cached['data']
                 last_modified = cached['last_modified']
 
@@ -203,18 +202,19 @@ class ModelSetConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=data)
 
     async def receive(self, text_data):
-        if not self.user:
-            data = text_data.split()
-            token = data[0]
-            try:
-                transaction = int(data[1])
-            except IndexError:
-                transaction = None
-            self.user = await self.authenticate(token=token)
-            if self.user:
-                await self.start(transaction)
-            else:
-                await self.close()
+        if self.user:
+            return
+        data = text_data.split()
+        token = data[0]
+        try:
+            transaction = int(data[1])
+        except IndexError:
+            transaction = None
+        self.user = await self.authenticate(token=token)
+        if self.user:
+            await self.start(transaction)
+        else:
+            await self.close()
 
     @database_sync_to_async
     def authenticate(self, token):
