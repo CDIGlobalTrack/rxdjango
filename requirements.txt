@@ -1,0 +1,12 @@
+# FIXME this is just a citation, we need to check the right names
+# and versions
+pymongo
+asgiref
+redis
+channels
+django
+django-rest-framework
+gzip
+pylibmc
+bson
+celery
