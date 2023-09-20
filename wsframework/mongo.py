@@ -1,182 +1,116 @@
-import json
-import sys
+from copy import copy
+from decimal import Decimal
 import pymongo
-import gridfs
-from bson.objectid import ObjectId
+from motor import motor_asyncio
+from django.db import ProgrammingError
 from django.conf import settings
-from django.utils import timezone
-
-def get_db():
-    client = pymongo.MongoClient(settings.MONGO_URL)
-    return client[settings.MONGO_TRANSACTIONS_DB]
-
-def init_collections(channel_type):
-    db = get_db()
-    transactions = db[channel_type]
-    latest = db[f'{channel_type}-latest']
-    log = db[f'{channel_type}-log']
-
-    drop_collections(channel_type)
-
-    # Used for upsert
-    transactions.create_index(
-        [
-            ['channel_instance_id', pymongo.ASCENDING],
-            ['instance_type', pymongo.ASCENDING],
-            ['instance_id', pymongo.ASCENDING],
-        ],
-        name='instance',
-        unique=True,
-    )
-
-    # Used to fetch new transactions
-    transactions.create_index(
-        [
-            ['channel_instance_id', pymongo.ASCENDING],
-            ['transaction', pymongo.DESCENDING],
-        ],
-        name='transaction',
-    )
-
-    # A log of all transactions, used to debug
-    transactions.create_index(
-        [
-            ['channel_instance_id', pymongo.ASCENDING],
-            ['transaction', pymongo.DESCENDING],
-        ],
-        name='transaction',
-    )
-
-    # Fetch latest transaction for a channel instance
-    latest.create_index('channel_instance_id')
-
-def drop_collections(channel_type):
-    db = get_db()
-    db[channel_type].drop()
-    db[f'{channel_type}-latest'].drop()
-    db[f'{channel_type}-log'].drop()
+from .redis import get_tstamp, sync_get_tstamp
 
 
-def get_latest_transaction_id(channel_type, channel_instance_id):
-    db = get_db()
-    latest = db[f'{channel_type}-latest']
+class MongoStateSession:
 
-    try:
-        result = latest.find_one({ 'channel_instance_id': channel_instance_id })
-        return result['transaction']
-    except TypeError:
-        # Start with 1, so that first transaction is different
-        # from default client behavior
-        return 1
+    def __init__(self, channel):
+        self.channel = channel
+        self.anchor_id = channel.anchor_id
+        self.user_id = channel.user_id
+        self.state_model = channel._state_model
+        self._tstamp = None
 
-def log_transaction(channel_type, channel_instance_id, payload):
-    db = get_db()
-    fs = gridfs.GridFS(db)
+        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        db = client[settings.MONGO_STATE_DB]
+        self.collection = db[channel.__class__.__name__.lower()]
 
-    transactions = db[channel_type]
-    latest = db[f'{channel_type}-latest']
+    async def tstamp(self):
+        if self._tstamp:
+            return self._tstamp
+        self._tstamp = await get_tstamp()
+        return self._tstamp
 
-    for update in payload['payload']:
-        update['channel_instance_id'] = channel_instance_id
-        update['transaction'] = payload['transaction']
+    async def list_instances(self, user_id):
+        for model in self.state_model.models():
+            instances = []
+            query = {
+                '_anchor_id': self.anchor_id,
+                '_user_key': {'$in': [None, user_id]},
+                '_instance_type': model.instance_type,
+            }
 
-        try:
-            transactions.replace_one(
+            async for instance in self.collection.find(query):
+                del instance['_id']
+                del instance['_anchor_id']
+                instances.append(instance)
+
+            if instances:
+                yield instances
+                instances = []
+
+    async def write_instances(self, instances):
+        for instance in instances:
+            instance = _adapt(instance)
+            instance['_anchor_id'] = self.anchor_id
+            instance_type = instance['_instance_type']
+            if instance.get('id', None) is None:
+                raise ProgrammingError(f'Instance type {instance_type} has no "id"')
+            await self.collection.replace_one(
                 {
-                    'channel_instance_id': channel_instance_id,
-                    'instance_type': update['instance_type'],
-                    'instance_id': update['instance_id'],
+                    '_anchor_id': self.anchor_id,
+                    '_instance_type': instance['_instance_type'],
+                    'id': instance['id'],
                 },
-                update,
-                upsert=True,
-            )
-        except pymongo.errors.DocumentTooLarge:
-            data = json.dumps(update['data']).encode()
-            ref = fs.put(data)
-            update['data'] = ref
-
-            transactions.replace_one(
-                {
-                    'channel_instance_id': channel_instance_id,
-                    'instance_type': update['instance_type'],
-                    'instance_id': update['instance_id'],
-                },
-                update,
+                instance,
                 upsert=True,
             )
 
 
+class MongoSignalWriter:
+    def __init__(self, channel_class):
+        client = pymongo.MongoClient(settings.MONGO_URL)
+        db = client[settings.MONGO_STATE_DB]
+        self.collection = db[channel_class.__name__.lower()]
 
-        if settings.TRANSACTION_LOG_ENABLED:
-            # This is for debugging, and it'll drop documents too large
-            log = db[f'{channel_type}-log']
-            log.insert_one(update)
+    def init_database(self):
+        # Make a new connection, because this needs to be sync
+        self.collection.drop()
 
-    latest.replace_one(
-        {
-            'channel_instance_id': channel_instance_id,
-        },
-        {
-            'channel_instance_id': channel_instance_id,
-            'transaction': payload['transaction'],
-            'tstamp': timezone.now(),
-        },
-        upsert=True,
-    )
+        self.collection.create_index(
+            [
+                ('_anchor_id', pymongo.ASCENDING),
+                ('_user_key', pymongo.ASCENDING),
+                ('_instance_type', pymongo.ASCENDING),
+                ('id', pymongo.ASCENDING),
+            ],
+            name='instance_pkey',
+        )
 
+        self.collection.create_index(
+            [
+                ('_anchor_id', pymongo.ASCENDING),
+                ('_tstamp', pymongo.DESCENDING),
+            ],
+            name='reconnection_index',
+        )
 
-def _unpack(item):
-    del item['_id']
-
-    if isinstance(item['data'], ObjectId):
-        db = get_db()
-        fs = gridfs.GridFS(db)
-        serialized = fs.get(item['data'])
-        item['data'] = json.loads(serialized.decode())
-
-    return item
-
-
-def get_updates(channel_type, channel_instance_id, transaction):
-    db = get_db()
-    transactions = db[channel_type]
-    result = transactions.find({
-        'channel_instance_id': channel_instance_id,
-        'transaction': { '$gt': transaction },
-    })
-
-    return [ _unpack(item) for item in result ]
-
-
-def get_instance(channel_type, channel_instance_id, instance_type, instance_id=None):
-    db = get_db()
-    transactions = db[channel_type]
-    criteria = {
-        'channel_instance_id': channel_instance_id,
-        'instance_type': instance_type,
-    }
-    if instance_id is not None:
-        criteria['instance_id'] = instance_id
-
-    if instance := transactions.find_one(criteria):
-        return _unpack(instance)
-    else:
-        return
+    def write_instances(self, anchor_id, instances):
+        for instance in instances:
+            instance = _adapt(instance)
+            instance['_anchor_id'] = anchor_id
+            assert instance['_tstamp']
+            self.collection.replace_one(
+                {
+                    '_anchor_id': anchor_id,
+                    '_instance_type': instance['_instance_type'],
+                    'id': instance['id'],
+                },
+                instance,
+                upsert=True,
+            )
 
 
-def list_instances(channel_type, channel_instance_id, instance_type, operation=None):
-    db = get_db()
-    transactions = db[channel_type]
-    criteria = {
-        'channel_instance_id': channel_instance_id,
-        'instance_type': instance_type,
-    }
-    if operation:
-        criteria['operation'] = operation
+def _adapt(instance):
+    adapted = {}
+    for key, value in instance.items():
+        if isinstance(value, Decimal):
+            value = float(value)
+        adapted[key] = value
 
-    instances = transactions.find(criteria)
-    if not instances:
-        return
-
-    for instance in instances:
-        yield _unpack(instance)
+    return adapted
