@@ -3,21 +3,21 @@ from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
-VERSION = '0.1'
+VERSION = '0.0.2'
 
 # parse requirements
 with open(path.join(cur_dir, "requirements.txt"), "r") as f:
     requirements = f.read().split()
 
 setup(
-    name="django-websockets-framework",
+    name="rxdjango",
     author="Luis Fagundes",
-    author_email="lhfagundes@gmail",
+    author_email="lhfagundes@gmail.com",
     version=VERSION,
     packages=find_packages(),
     license="LICENSE.md",
     install_requires=requirements,
-    url="https://github.com/lfagundes/django-websockets-framework",
+    url="https://github.com/CDIGlobalTrack/rxdjango",
     include_package_data=True,
-    python_requires=">=3.8"
+    python_requires=">=3.10"
 )
