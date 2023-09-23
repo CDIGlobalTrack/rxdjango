@@ -4,7 +4,7 @@ from django.apps import apps, AppConfig
 
 class ReactFrameworkConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'wsframework'
+    name = 'rxdjango'
 
     def ready(self):
         """Discover and register StateChannel subclasses within Django apps."""

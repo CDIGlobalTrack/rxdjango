@@ -5,7 +5,7 @@ from collections import defaultdict
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import URLPattern, URLResolver
 from django.conf import settings
-from wsframework.consumers import StateConsumer
+from rxdjango.consumers import StateConsumer
 from . import header
 from . import interface_name
 

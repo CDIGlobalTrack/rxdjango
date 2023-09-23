@@ -2,8 +2,8 @@ from django.apps import apps
 from django.db import ProgrammingError
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from wsframework.ts.interfaces import create_app_interfaces
-from wsframework.ts.channels import create_app_channels
+from rxdjango.ts.interfaces import create_app_interfaces
+from rxdjango.ts.channels import create_app_channels
 
 
 class Command(BaseCommand):
