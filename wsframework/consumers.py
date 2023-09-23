@@ -42,12 +42,9 @@ class StateConsumer(AsyncWebsocketConsumer):
     async def receive_authentication(self, text_data):
         # If user is not logged, we expect a text with
         # token and maybe last_update
-        data = text_data.split()
-        token = data[0]
-        try:
-            last_update = float(data[1])
-        except (IndexError, ValueError):
-            last_update = None
+        data = json.loads(text_data)
+        token = data.get('token', None)
+        last_update  = data.get('last_update', None)
 
         user = await self.authenticate(token=token)
         if user:
@@ -112,15 +109,21 @@ class StateConsumer(AsyncWebsocketConsumer):
         try:
             token = Token.objects.get(key=token)
         except Token.DoesNotExist:
+            #self.send('ERROR/Unauthorized')
             return
         self.token = token.key
 
         kwargs = self.scope['url_route']['kwargs']
-        if self.state_channel_class.has_permission(
+        if not self.state_channel_class.has_permission(
                 token.user,
                 **kwargs,
         ):
-            return token.user
+            #self.send('ERROR/Forbidden')
+            return
+
+        #self.send('OK')
+
+        return token.user
 
     async def relay(self, payload):
         payload = payload['payload']

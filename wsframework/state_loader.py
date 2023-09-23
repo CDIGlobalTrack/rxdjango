@@ -1,9 +1,11 @@
 import asyncio
 from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
+from django.conf import settings
 from .redis import RedisStateSession
 from .mongo import MongoStateSession
-from django.conf import settings
+from .exceptions import AnchorDoesNotExist
+
 
 
 if settings.DEBUG or settings.TESTING:
@@ -95,7 +97,9 @@ class StateLoader:
         try:
             return Anchor.objects.get(id=self.anchor_id)
         except Anchor.DoesNotExist:
-            return None
+            raise AnchorDoesNotExist(
+                f'{Anchor.__name__} id {self.anchor_id} does not exist'
+            )
 
     async def _list_instances_heating(self):
         """In HEATING state, fetch all instances from redis and
