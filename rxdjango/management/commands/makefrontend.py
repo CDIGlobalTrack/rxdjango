@@ -26,8 +26,8 @@ class Command(BaseCommand):
             create_app_channels(app)
 
     def _check(self):
-        if not getattr(settings, 'FRONTEND_DIR', None):
+        if not getattr(settings, 'RX_FRONTEND_DIR', None):
             raise ProgrammingError(
-                "settings.FRONTEND_DIR is not set. Configure it with a folder "
+                "settings.RX_FRONTEND_DIR is not set. Configure it with a folder "
                 "inside your react application."
             )

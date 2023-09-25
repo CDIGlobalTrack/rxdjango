@@ -18,7 +18,7 @@ def create_app_interfaces(app):
     except ModuleNotFoundError:
         return
 
-    path = os.path.join(settings.FRONTEND_DIR, f'{app}/{app}.interfaces.d.ts')
+    path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.interfaces.d.ts')
 
     serializers = get_serializers(module)
 

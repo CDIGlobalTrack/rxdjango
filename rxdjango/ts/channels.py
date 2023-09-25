@@ -15,7 +15,7 @@ def create_app_channels(app):
     if not consumer_urlpatterns:
         return
 
-    path = os.path.join(settings.FRONTEND_DIR, f'{app}/{app}.channels.ts')
+    path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.channels.ts')
 
     code = header(
         app,
@@ -25,7 +25,7 @@ def create_app_channels(app):
 
     code.extend([
         f"import {{ StateChannel }} from 'lib/django-react';\n",
-        f'const SOCKET_URL = {settings.FRONTEND_WEBSOCKET_URL};',
+        f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
     import_types = defaultdict(list)

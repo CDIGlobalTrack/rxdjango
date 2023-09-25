@@ -1,59 +1,96 @@
-Django Websockets Framework
-===========================
+RX-Django
+=========
 
-Django Websockets Framework (DWF) is a layer over Django Channels aimed to make it as simple as possible to broadcast
+RX-Django is a layer over Django Channels aimed to make it as simple as possible to broadcast
 changes in Django models to browsers through websockets, with minimal latency.
 
-It's been tested in production for 18 months and is now being released as v0.1. The current released code is not functional yet,
-as it needs some adjustments to become a proper Open Source project. The current code was released at Python Brasil 2022, as a
-first step to build a community around it.
+It's evolving in production for more than 2 years now and it's revised API has just been released
+in Python Nordeste 2023. There's no stable release yet.
 
-Architecture
-============
+Quickstart
+==========
 
-DWF uses a snapshot/updates model: once browser connects to the websocket endpoint, a snapshot containing all the relevant instances
-serialized will be sent, and subsequent updates will be broadcast to all connected clients.
-
-Example
-=======
+Start by defining a StateChannel and define an "anchor", which is a serializer that will build
+the state that will be sent to user.
 
 ```python
 # chat/channels.py
-class ChatRoomChannel(ModelSetChannel):
-    snapshot = ChatRoomSnapshotSerializer
+from rxdjango.channels import StateChannel
+from chat.serializers import ChatRoomSerializer
 
-    pieces = [
-        ChatRoomSerializer,
-        OnlineUserSerializer,
-        MessageSerializer,
-    ]
 
-    def has_permission(self, user, survey_id):
+class ChatRoomChannel(StateChannel):
+
+    class Meta:
+        anchor = ChatRoomSerializer()
+
+    def has_permission(self, user, chat_room):
         # check permission
         return True
 
-
-# chat/signals.py
-# automatically broadcast any change
-channel = ChatRoomChannel()
-channel.broadcast_updates(ChatRoom)
-channel.broadcast_updates(OnlineUser)
-
-# chat/models.py
-class Message(models.Model):
-    ...
-    def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-        # or trigger brodcast manually
-        from chat.channels import ChatRoomChannel
-        channel = ChatRoomChannel()
-        channel.broadcast_instance(self.chatroom, self)
-
 ```
 
-Features
-========
+Then define paths for the channels in websocket_urlpatterns.
+[Django Channels documentation](https://channels.readthedocs.io/en/latest/tutorial/part_2.html)
+suggests you put this in app/routing.py.
 
-* Automatically implement signals to broadcast changes
-* Send snapshot through a HTTP request, synchronized with socket, to make use of browser caching
-* Store indexed transactions in mongodb, so that user can get lost updates on reconnection
+```python
+# chat/routing.py
+from chat.channels import ChatRoomChannel
+
+websocket_urlpatterns = [
+    path('ws/chat/<str:room_name>/', ChatRoomChannel.as_asgi()),
+]
+```
+
+This is all the code it takes in the app! From that, RX-Django will generate all the frontend
+code required to keep state in sync between backend and frontend. For that, we need to configure
+settings.py with some information about the frontend.
+
+```python
+# settings.py
+
+RX_FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend/src/app/modules')
+RX_WEBSOCKET_URL = "import.meta.env.VITE_SOCKET_URL"
+```
+
+In the above example, we want our code to be generated at src/app/modules, and we take the websocket url from Vite.
+Also, there are some backend configuration required. Right now, we only support Redis and Mongo for caching.
+
+```python
+# settings.py
+MONGO_URL = "configure me"
+REDIS_URL = "configure me"
+# for now framework expects this to exist, and to be set to True during tests
+TESTING = False
+```
+
+And, of course, add `rxdjango` to your INSTALLED_APPS
+
+```python
+# settings.py
+INSTALLED_APPS = [
+    # ...
+    'rxdjango',
+]
+```
+
+Build all the frontend files:
+
+```bash
+python manage.py makefrontend
+```
+
+Check the files generated inside your modules app. Now, use the state
+from the backend with:
+
+```typescript
+import { ChatRoomChannel } from 'app/modules/chat.channels';
+import { useChannelState } from 'django-react';
+
+channel = new ChatRoomChannel(roomName, token);
+chatState = useChannelState(channel);
+```
+
+That's all it takes! Note that token is a rest_framework.authtoken token,
+the only authentication method supported for now.
