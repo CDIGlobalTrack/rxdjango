@@ -1,3 +1,4 @@
+import json
 from copy import copy
 from decimal import Decimal
 import pymongo
@@ -51,6 +52,7 @@ class MongoStateSession:
             instance_type = instance['_instance_type']
             if instance.get('id', None) is None:
                 raise ProgrammingError(f'Instance type {instance_type} has no "id"')
+            instance = self._fix_instance(instance)
             await self.collection.replace_one(
                 {
                     '_anchor_id': self.anchor_id,
@@ -60,6 +62,12 @@ class MongoStateSession:
                 instance,
                 upsert=True,
             )
+
+    def _fix_instance(self, instance):
+        """Convert datetime fields to string"""
+        # Bad way to do, we need a better handling of datetime,
+        # which is being delivered as strings
+        return json.loads(json.dumps(instance, default=str))
 
 
 class MongoSignalWriter:
