@@ -1,12 +1,5 @@
-# FIXME this is just a citation, we need to check the right names
-# and versions
-pymongo
-asgiref
-redis
-channels
-django
-django-rest-framework
-gzip
-pylibmc
-bson
-celery
+Django>=4.2
+motor>=3.3
+channels>=4
+channels-redis>=4.1
+djangorestframework>=3
