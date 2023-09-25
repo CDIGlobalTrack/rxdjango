@@ -7,7 +7,9 @@ VERSION = '0.0.2'
 
 # parse requirements
 with open(path.join(cur_dir, "requirements.txt"), "r") as f:
-    requirements = f.read().split()
+    requirements = f.read().split('\n')
+
+requirements = [ x for x in requirements if x and not x.startswith('#') ]
 
 setup(
     name="rxdjango",
