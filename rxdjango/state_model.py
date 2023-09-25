@@ -72,11 +72,11 @@ class StateModel:
                 yield model
 
     def frontend_model(self):
-        frontend = defaultdict(list)
+        frontend = {}
         for key, nodes in self.index.items():
             node = nodes[0]
             instance_model = {}
-            frontend[key].append(instance_model)
+            frontend[key] = instance_model
             serializer = node.nested_serializer
             for field_name, field in serializer._declared_fields.items():
                 if is_model_serializer(field):
