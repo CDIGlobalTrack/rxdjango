@@ -2,19 +2,30 @@ import InstanceHandler from './InstanceHandler';
 import { HandlerIndex } from './InstanceHandler.d';
 import { InstanceType, Listener, Model, ModelEntry } from './StateChannel.d';
 
-abstract class StateChannel<T> {  
+interface ConnectionStatus {
+    status_code: number;
+    error?: string | null;  // Assuming error is either a string or null. Adjust type if needed.
+}
+
+abstract class StateChannel<T> {
   protected state: T | undefined = undefined;
+
   private ws: WebSocket | undefined = undefined;
   private listeners: Listener<T>[] = [];
   private token: string;
 
   private handlers: HandlerIndex = {};
   private anchorHandler: InstanceHandler | undefined = undefined;
-  
+
   abstract endpoint: string;
   abstract anchor: string;
   abstract baseURL: string;
   abstract model: Model;
+
+  public connectionStatus: ConnectionStatus = {
+    status_code: 0,
+    error: null,
+  }
 
   constructor(token: string) {
     this.token = token;
@@ -22,6 +33,11 @@ abstract class StateChannel<T> {
 
   private handleMessage(event: MessageEvent) {
     const data = JSON.parse(event.data);
+
+    if (this.connectionStatus.status_code === 0) {
+      this.connectionStatus = data as ConnectionStatus;
+      return;
+    }
 
     for (const payload of data) {
       this.receiveInstance(payload);
@@ -36,7 +52,7 @@ abstract class StateChannel<T> {
       this.receiveAnchorInstance(key, instance);
       return;
     }
-    
+
     if (this.handlers[key]) {
       // This is an nested instance
       this.receiveNestedInstance(key, instance);
@@ -60,7 +76,7 @@ abstract class StateChannel<T> {
   }
 
   private receiveNestedInstance(key: string, instance: InstanceType) {
-    const handler = this.handlers[key];    
+    const handler = this.handlers[key];
     handler.setData(instance);
 
     const model = this.model[instance._instance_type];
@@ -80,7 +96,7 @@ abstract class StateChannel<T> {
             const handler = this.makeInstanceHandler(key, property);
             this.handlers[key] = handler;
           }
-          
+
           this.handlers[key].subscribe(() => this.rebuildState());
         }
       } else {
@@ -105,7 +121,7 @@ abstract class StateChannel<T> {
 
   private getCascadeInstance(model: ModelEntry, instance: InstanceType) {
     const state = { ...instance };
-    
+
     for (const [property, instanceType] of Object.entries(model)) {
       if (Array.isArray(instance[property])) {
         // this is a list
@@ -117,7 +133,7 @@ abstract class StateChannel<T> {
             // it means that instance still not loadded
             return undefined;
           }
-          
+
           const cascadeModel = this.model[instanceType];
           return this.getCascadeInstance(cascadeModel, data);
         });
@@ -131,7 +147,7 @@ abstract class StateChannel<T> {
           state[property] = undefined;
           continue;
         }
-        
+
         const cascadeModel = this.model[instanceType];
         state[property] = this.getCascadeInstance(cascadeModel, data) as T;
       }
@@ -197,7 +213,7 @@ abstract class StateChannel<T> {
 
   public subscribe(listener: Listener<T>): () => void {
     if (!this.ws) throw 'ERROR! Websocket not initialized.';
-    
+
     this.listeners.push(listener);
     return () => {
       const index = this.listeners.indexOf(listener);
