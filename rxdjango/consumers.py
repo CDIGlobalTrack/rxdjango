@@ -9,6 +9,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
+from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
 
 
 class StateConsumer(AsyncWebsocketConsumer):
@@ -46,9 +47,19 @@ class StateConsumer(AsyncWebsocketConsumer):
         token = data.get('token', None)
         last_update  = data.get('last_update', None)
 
-        user = await self.authenticate(token=token)
+        try:
+            user = await self.authenticate(token=token)
+        except UnauthorizedError:
+            await self.send_connection_status(401, 'error/unauthorized')
+        except ForbiddenError:
+            await self.send_connection_status(403, 'error/forbidden')
+
         if user:
-            await self.start(user, last_update)
+            try:
+                await self.start(user, last_update)
+            except AnchorDoesNotExist:
+                await self.send_connection_status(404, 'error/not-found')
+
         else:
             await self.close()
 
@@ -136,3 +147,11 @@ class StateConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             await self.disconnect()
         await self.channel.receive(data)
+
+    async def send_connection_status(self, status_code, error=None):
+        data = {}
+        data['status_code'] = status_code
+        data['error'] = error
+        text_data = json.dumps(data)
+        close = error != None
+        await self.send(text_data=text_data, close=close)

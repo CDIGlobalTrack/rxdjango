@@ -6,8 +6,6 @@ from .redis import RedisStateSession
 from .mongo import MongoStateSession
 from .exceptions import AnchorDoesNotExist
 
-
-
 if settings.DEBUG or settings.TESTING:
     def mark(instances, cache_state):
         if instances:
