@@ -41,8 +41,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self.receive_authentication(text_data)
 
     async def receive_authentication(self, text_data):
-        # If user is not logged, we expect a text with
-        # token and maybe last_update
+        # If user is not logged, we expect credentials
         data = json.loads(text_data)
         token = data.get('token', None)
         last_update  = data.get('last_update', None)
@@ -79,6 +78,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         )
 
         async with StateLoader(self.channel) as loader:
+            await self.send_connection_status(200)
             await self.channel.on_connect(tstamp)
 
             async for instances in loader.list_instances():
@@ -120,7 +120,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         try:
             token = Token.objects.get(key=token)
         except Token.DoesNotExist:
-            #self.send('ERROR/Unauthorized')
+            raise UnauthorizedError('error/unauthorized')
             return
         self.token = token.key
 
@@ -129,10 +129,8 @@ class StateConsumer(AsyncWebsocketConsumer):
                 token.user,
                 **kwargs,
         ):
-            #self.send('ERROR/Forbidden')
+            raise ForbiddenError('error/forbidden')
             return
-
-        #self.send('OK')
 
         return token.user
 
@@ -151,7 +149,8 @@ class StateConsumer(AsyncWebsocketConsumer):
     async def send_connection_status(self, status_code, error=None):
         data = {}
         data['status_code'] = status_code
-        data['error'] = error
+        if error:
+            data['error'] = error
         text_data = json.dumps(data)
         close = error != None
         await self.send(text_data=text_data, close=close)
