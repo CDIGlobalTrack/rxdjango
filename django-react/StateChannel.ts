@@ -1,16 +1,12 @@
 import InstanceHandler from './InstanceHandler';
+import PersistentWebsocket from './PersistentWebsocket';
 import { HandlerIndex } from './InstanceHandler.d';
 import { InstanceType, Listener, Model, ModelEntry } from './StateChannel.d';
-
-interface ConnectionStatus {
-    status_code: number;
-    error?: string | null;  // Assuming error is either a string or null. Adjust type if needed.
-}
 
 abstract class StateChannel<T> {
   protected state: T | undefined = undefined;
 
-  private ws: WebSocket | undefined = undefined;
+  private ws: PersistentWebsocket | undefined = undefined;
   private listeners: Listener<T>[] = [];
   private token: string;
 
@@ -22,30 +18,19 @@ abstract class StateChannel<T> {
   abstract baseURL: string;
   abstract model: Model;
 
-  public connectionStatus: ConnectionStatus = {
-    status_code: 0,
-    error: null,
-  }
-
   constructor(token: string) {
     this.token = token;
   }
 
-  private handleMessage(event: MessageEvent) {
-    const data = JSON.parse(event.data);
-
-    if (this.connectionStatus.status_code === 0) {
-      this.connectionStatus = data as ConnectionStatus;
-      return;
-    }
-
-    for (const payload of data) {
-      this.receiveInstance(payload);
+  private handleMessage(instances: InstanceType[]) {
+    for (const instance of instances) {
+      this.receiveInstance(instance);
     }
   }
 
   private async receiveInstance(instance: InstanceType) {
     const key = `${instance._instance_type}:${instance.id}`;
+    console.log('RECEIVEINSTANCE')
 
     if (instance._instance_type === this.anchor) {
       // This is an anchor
@@ -191,21 +176,13 @@ abstract class StateChannel<T> {
   }
 
   public init() {
-    const ws = new WebSocket(this.getEndpoint());
-    ws.onopen = () => {
-      // TODO: custom on open
-      const data = { token: this.token };
-      const stringfiedData = JSON.stringify(data);
-      ws.send(stringfiedData);
-    }
+    if (this.ws)
+      return;
 
-    ws.onmessage = (event: MessageEvent) => {
-      this.handleMessage(event);
-    };
+    const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
-    ws.onerror = () => {
-      // TODO: custom on error
-      console.log('ERROR! Could not connect to websocket.');
+    ws.onmessage = (instances) => {
+      this.handleMessage(instances);
     };
 
     this.ws = ws;
@@ -215,10 +192,16 @@ abstract class StateChannel<T> {
     if (!this.ws) throw 'ERROR! Websocket not initialized.';
 
     this.listeners.push(listener);
+
+    if (this.listeners.length === 1)
+      this.ws.connect();
+
     return () => {
       const index = this.listeners.indexOf(listener);
       if (index !== -1) {
         this.listeners.splice(index, 1);
+        if (this.listeners.length === 0)
+          this.ws!.disconnect();
       }
     };
   }

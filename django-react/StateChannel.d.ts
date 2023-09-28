@@ -15,3 +15,8 @@ export interface InstanceType {
   _tstamp: number;
   _deleted?: boolean;
 };
+
+export interface AuthStatus {
+    status_code: number;
+    error?: string | null;
+}
