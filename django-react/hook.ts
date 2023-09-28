@@ -6,7 +6,6 @@ export const useChannelState = <T>(channel: StateChannel<T>) => {
 
   useEffect(() => {
     // FIX: passing twice here
-    channel.init();
     const unsubscribe = channel.subscribe(setReactState);
 
     return () => {
