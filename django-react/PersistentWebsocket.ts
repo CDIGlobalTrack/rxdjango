@@ -17,7 +17,7 @@ export default class PersistentWebSocket {
   public onopen: () => void = () => {};
   public onclose: (event: CloseEvent) => void = () => {};
   public onauth: (authStatus: AuthStatus) => void = () => {};
-  public onmessage: (instances: InstanceType[]) => void = () => {};
+  public oninstances: (instances: InstanceType[]) => void = () => {};
 
   constructor(url, token, protocols = [], initialReconnectInterval = 50, maxReconnectInterval = 5000) {
     this.url = url;
@@ -57,7 +57,7 @@ export default class PersistentWebSocket {
         return;
       }
 
-      this.onmessage(message as InstanceType[]);
+      this.oninstances(message as InstanceType[]);
     };
 
     this.ws.onclose = (event) => {

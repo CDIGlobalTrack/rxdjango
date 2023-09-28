@@ -25,7 +25,7 @@ abstract class StateChannel<T> {
 
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
-    ws.onmessage = (instances) => {
+    ws.oninstances = (instances) => {
       this.receiveInstances(instances);
     };
 
