@@ -119,10 +119,6 @@ class ContextChannel(metaclass=ContextChannelMeta):
         """Called when user disconnects"""
         pass
 
-    async def receive(self, data):
-        """Any data sent by user will get here"""
-        pass
-
     @classmethod
     def broadcast_instance(cls, anchor_id, instance, operation='update'):
         cls._signal_handler.broadcast_instance(anchor_id, instance, operation)
