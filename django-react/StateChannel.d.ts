@@ -17,6 +17,6 @@ export interface InstanceType {
 };
 
 export interface AuthStatus {
-    status_code: number;
-    error?: string | null;
+  status_code: number;
+  error?: string | null;
 }

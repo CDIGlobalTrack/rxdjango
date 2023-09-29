@@ -9,6 +9,7 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
+from .actions import execute_action
 from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
 
 
@@ -35,14 +36,19 @@ class StateConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            await self.disconnect()
+            raise
+
         if self.user:
-            await self.receive_command(text_data)
+            await self.receive_action(data)
         else:
-            await self.receive_authentication(text_data)
+            await self.receive_authentication(data)
 
     async def receive_authentication(self, text_data):
         # If user is not logged, we expect credentials
-        data = json.loads(text_data)
         token = data.get('token', None)
         last_update  = data.get('last_update', None)
 
@@ -138,13 +144,18 @@ class StateConsumer(AsyncWebsocketConsumer):
         payload = payload['payload']
         await self.send(text_data=json.dumps(payload, default=str))
 
-    async def receive_command(self, text_data):
-        # If user is logged, we expect a JSON command
+    async def receive_action(self, action):
+        call_id = action['callId']
+        method_name = action.pop('action')
+        params = action.pop('params')
+
         try:
-            data = json.loads(text_data)
-        except json.JSONDecodeError:
-            await self.disconnect()
-        await self.channel.receive(data)
+            action['result'] = execute_action(self.channel, method_name, params)
+            await self.send(text_data=json.dumps(action))
+        except Exception as e:
+            action['error'] = 'Error'
+            await self.send(text_data=json.dumps(action))
+            raise
 
     async def send_connection_status(self, status_code, error=None):
         data = {}
