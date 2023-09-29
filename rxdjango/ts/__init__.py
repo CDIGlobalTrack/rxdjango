@@ -1,12 +1,26 @@
 import os
 import difflib
 import subprocess
+import types
+import typing
+from decimal import Decimal
+from datetime import datetime
+from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework import serializers
 
-"""Exports serializers interfaces as TypeScript interfaces"""
-
 __serializers = set()
+
+TYPEMAP = {
+    int: 'number',
+    float: 'number',
+    Decimal: 'number',
+    datetime: 'string',
+    str: 'string',
+    bool: 'boolean',
+    type(None): 'null',
+    QuerySet: 'number[]',
+}
 
 def interface_name(Serializer):
     return Serializer.__name__.replace('Serializer', 'Type')
@@ -105,3 +119,21 @@ def _git_relative_path(filepath):
     except subprocess.CalledProcessError:
         # If the git command fails, return the original path
         return filepath
+
+    
+def get_ts_type(ftype):
+    if type(ftype) is types.UnionType :
+        py_types = typing.get_args(ftype)
+    else:
+        py_types = [ftype]
+
+    ts_types = [ TYPEMAP[typ] for typ in py_types ]
+    return ' | '.join(ts_types)
+
+
+def snake_to_camel(s):
+    components = s.split('_')
+    # We capitalize the first letter of each component except the first one
+    # with the 'title' method and join them together.
+    return components[0] + ''.join(x.title() for x in components[1:])
+

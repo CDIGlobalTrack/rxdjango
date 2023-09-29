@@ -1,12 +1,14 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
 import { NoConnectionListener, TempInstance, Listener, Model } from './ContextChannel.interfaces';
+import { Action, ActionResponse, ActionIndex } from './actions.d';
 
 abstract class ContextChannel<T> {
   private ws: PersistentWebsocket | undefined;
   private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
   private noConnectionListeners: NoConnectionListener[] = [];
+  private activeCalls: ActionIndex = {};
   private token: string;
 
   protected args: { [key: string]: number | string } = {};
@@ -30,10 +32,14 @@ abstract class ContextChannel<T> {
 
     ws.onclose = this.onclose.bind(this);
     ws.onopen = this.onopen.bind(this);
-    
-    ws.oninstances = (instances) => {
+
+    ws.onInstances = (instances) => {
       this.receiveInstances(instances);
     };
+
+    ws.onActionResponse = (response) => {
+      this.receiveActionResponse(response);
+    }
 
     this.ws = ws;
   }
@@ -75,6 +81,30 @@ abstract class ContextChannel<T> {
     return unsubscribe;
   }
 
+  protected async callAction<T>(action: string, params: any[]): Promise<T> {
+    const callId = this.generateUniqueId();
+    const cmd: Action = { callId, action, params };
+    const activeCalls = this.activeCalls;
+    return new Promise((resolve, reject) => {
+      activeCalls[callId] = {resolve, reject} as CallPromise<T>;
+      this.ws.send(JSON.stringify(cmd));
+    });
+  }
+
+  private receiveActionResponse<T>(response: ActionResponse<T>) {
+    const promise = this.activeCalls[response.callId];
+    if (!promise) {
+        console.error(`Received a response for unmatched callId: ${response.callId}`);
+        return;
+    }
+    if (!response.error) {
+      promise.resolve(response.result as T);
+    } else {
+      promise.reject(response.error);
+    }
+    delete this.activeCalls[response.callId];
+  }
+
   private getEndpoint(): string {
     let constructedEndpoint = this.endpoint;
 
@@ -100,12 +130,20 @@ abstract class ContextChannel<T> {
       listener(undefined);
     }
   }
-  
+
   private onclose() {
     const now = new Date();
     for (const listener of this.noConnectionListeners) {
       listener(now);
     }
+  }
+
+  private idCounter: number = 0;
+
+  private generateUniqueId(): number {
+    const now = new Date().getTime();
+    this.idCounter = (this.idCounter + 1) % 1000000;
+    return now * 1000000 + this.idCounter;
   }
 }
 

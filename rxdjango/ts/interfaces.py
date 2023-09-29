@@ -1,15 +1,11 @@
 import os
-import types
 import typing
 import importlib
-from decimal import Decimal
-from datetime import datetime
 from django.utils import timezone
-from django.db.models.query import QuerySet
 from django.db.models.fields import related_descriptors
 from django.conf import settings
 from rest_framework import serializers, relations, fields
-from . import ts_exported, header, interface_name, diff
+from . import ts_exported, header, interface_name, get_ts_type, diff
 
 def create_app_interfaces(app, apply_changes=True, force=False):
     serializer_module_name = f'{app}.serializers'
@@ -187,24 +183,7 @@ def __get_function_type(func):
     except KeyError:
         return 'any'
 
-    PY_TO_TS = {
-        int: 'number',
-        float: 'number',
-        Decimal: 'number',
-        datetime: 'string',
-        str: 'string',
-        bool: 'boolean',
-        type(None): 'null',
-        QuerySet: 'number[]',
-    }
-
-    if type(ftype) is types.UnionType :
-        py_types = typing.get_args(ftype)
-    else:
-        py_types = [ftype]
-
-    ts_types = [ PY_TO_TS[typ] for typ in py_types ]
-    return ' | '.join(ts_types)
+    return get_ts_type(ftype)
 
 def __map_choices_to_union(field_type, choices):
     '''

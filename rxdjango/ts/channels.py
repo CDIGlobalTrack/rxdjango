@@ -1,12 +1,14 @@
 import os
 import re
 import json
+import typing
 from collections import defaultdict
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import URLPattern, URLResolver
 from django.conf import settings
 from rxdjango.consumers import StateConsumer
-from . import header, interface_name, diff
+from rxdjango.actions import list_actions
+from . import header, interface_name, diff, get_ts_type, snake_to_camel
 
 def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
@@ -210,6 +212,26 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     code.append(f"  }}")
 
     code.append('')
+
+    # Actions
+    for action in list_actions(context_channel_class):
+        hints = typing.get_type_hints(action)
+
+        camel_action = snake_to_camel(action.__name__)
+
+        return_type = hints.pop('return', type(None))
+        return_type = get_ts_type(return_type)
+
+        params = [ f'{k}: {get_ts_type(v)}' for k, v in hints.items() ]
+        params = ', '.join(params)
+
+        call_params = ', '.join(list(hints.keys()))
+
+        code.append(f"  public async {camel_action}({params}): {return_type} {{")
+        code.append(f"    return await this.callAction('{action.__name__}', [{call_params}]);")
+        code.append(f"  }}")
+
+        code.append('')
 
     model = context_channel_class._state_model.frontend_model()
     model_code = json.dumps(model, indent=2)

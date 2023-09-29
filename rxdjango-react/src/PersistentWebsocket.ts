@@ -3,6 +3,7 @@ import {
   TempInstance,
   SystemMessage,
 } from './ContextChannel.interfaces';
+import { ActionResponse } from './actions.d';
 
 
 export default class PersistentWebSocket {
@@ -19,11 +20,12 @@ export default class PersistentWebSocket {
 
   public authStatus: AuthStatus | undefined;
 
-  public onopen: () => void = () => {};
-  public onclose: (event: CloseEvent) => void = () => {};
-  public onauth: (authStatus: AuthStatus) => void = () => {};
-  public oninstances: (instances: TempInstance[]) => void = () => {};
-  public onsystem: (message: SystemMessage) => void = () => {};
+  public onOpen: () => void = () => {};
+  public onClose: (event: CloseEvent) => void = () => {};
+  public onAuth: (authStatus: AuthStatus) => void = () => {};
+  public onInstances: (instances: TempInstance[]) => void = () => {};
+  public onActionResponse: (response: ActionResponse) => void = () => {};
+  public onSystem: (message: SystemMessage) => void = () => {};
 
   constructor(
     url: string,
@@ -51,7 +53,7 @@ export default class PersistentWebSocket {
     this.ws.onopen = () => {
       this.ws!.send(JSON.stringify({ token: this.token }));
       this.reconnectInterval = this.initialReconnectInterval;
-      this.onopen();
+      this.onOpen();
     };
 
     this.ws.onmessage = (event) => {
@@ -60,7 +62,7 @@ export default class PersistentWebSocket {
       if (!this.authStatusReceived) {
         this.authStatusReceived = true;
         this.authStatus = message as AuthStatus;
-        this.onauth(this.authStatus);
+        this.onAuth(this.authStatus);
         if (this.authStatus.error) {
           console.error("Authentication Error:", this.authStatus.error);
           this.ws!.close();
@@ -69,11 +71,16 @@ export default class PersistentWebSocket {
       }
 
       if (event.data[0] == '[') {
-        this.oninstances(message as TempInstance[]);
+        this.onInstances(message as TempInstance[]);
       } else if (event.data[0] != '{') {
         return;
       }
 
+      if (message['callId']) {
+        this.onActionResponse(message as ActionResponse);
+        return;
+      }
+      
       if (message['source'] == 'system') {
         this.onsystem(message as SystemMessage);
       }

@@ -186,10 +186,6 @@ class ContextChannel(metaclass=ContextChannelMeta):
         """Called when user disconnects"""
         pass
 
-    async def receive(self, data):
-        """Any data sent by user will get here"""
-        pass
-
     async def clear_cache(self):
         redis = RedisStateSession(self)
         mongo = MongoStateSession(self)

@@ -12,3 +12,6 @@ class ForbiddenError(Exception):
 
 class RxDjangoBug(Exception):
     pass
+
+class ActionNotAsync(Exception):
+    pass
