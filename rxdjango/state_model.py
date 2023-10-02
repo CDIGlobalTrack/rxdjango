@@ -179,6 +179,17 @@ class StateModel:
         except AttributeError:
             return
 
+        if isinstance(descriptor, related_descriptors.ManyToManyDescriptor):
+            related_descriptor = getattr(descriptor.field.model, descriptor.field.name)
+            return StateModel(
+                serializer.child,
+                True,
+                self,
+                field_name,
+                field_name,
+                descriptor.field.name,
+            )
+
         if isinstance(descriptor, related_descriptors.ReverseManyToOneDescriptor):
             related_descriptor = getattr(descriptor.field.model, descriptor.field.name)
             return StateModel(
