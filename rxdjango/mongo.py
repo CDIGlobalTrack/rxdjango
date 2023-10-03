@@ -35,6 +35,7 @@ class MongoStateSession:
                 '_anchor_id': self.anchor_id,
                 '_user_key': {'$in': [None, user_id]},
                 '_instance_type': model.instance_type,
+                '_deleted': {'$ne': True},
             }
 
             async for instance in self.collection.find(query):
