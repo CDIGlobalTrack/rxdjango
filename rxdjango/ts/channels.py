@@ -157,10 +157,9 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
     ]
 
     # Add private properties based on parameters
-    for key, ts_type in parameters.items():
-        code.append(f"  {key}: {ts_type};")
+    # for key, ts_type in parameters.items():
+    #     code.append(f"  {key}: {ts_type};")
 
-    code.append('')
     code.append(f'  baseURL: string = SOCKET_URL;\n')
 
     # Constructor
@@ -171,7 +170,7 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
 
     code.append(f"  constructor({params}) {{")
     code.append(f"    super(token);")
-    code.extend([f"    this.{key} = {key};" for key in parameters])
+    code.extend([f"    this.args['{key}'] = {key};" for key in parameters])
     code.append(f"  }}")
 
     code.append('')

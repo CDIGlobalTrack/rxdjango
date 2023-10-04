@@ -2,11 +2,11 @@ export type Listener<T> = (state: T) => void;
 
 export type Model = {
   [key: string]: ModelEntry;
-};
+}
 
 export type ModelEntry = {
   [key: string]: string;
-};
+}
 
 export interface InstanceType {
   id: number;
@@ -14,9 +14,9 @@ export interface InstanceType {
   _operation: string;
   _tstamp: number;
   _deleted?: boolean;
-};
+}
 
 export interface AuthStatus {
-    status_code: number;
-    error?: string | null;
+  status_code: number;
+  error?: string | null;
 }

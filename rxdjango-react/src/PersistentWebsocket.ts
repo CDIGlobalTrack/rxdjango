@@ -19,7 +19,13 @@ export default class PersistentWebSocket {
   public onauth: (authStatus: AuthStatus) => void = () => {};
   public oninstances: (instances: InstanceType[]) => void = () => {};
 
-  constructor(url, token, protocols = [], initialReconnectInterval = 50, maxReconnectInterval = 5000) {
+  constructor(
+    url: string,
+    token: string,
+    protocols = [],
+    initialReconnectInterval = 50,
+    maxReconnectInterval = 5000,
+  ) {
     this.url = url;
     this.protocols = protocols;
     this.initialReconnectInterval = initialReconnectInterval;
@@ -74,7 +80,7 @@ export default class PersistentWebSocket {
     };
   }
 
-  send(data) {
+  send(data: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
     } else {
