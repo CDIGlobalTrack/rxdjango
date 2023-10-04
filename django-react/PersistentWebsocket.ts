@@ -1,4 +1,5 @@
 import { AuthStatus, InstanceType } from './StateChannel.d';
+import { ActionResponse } from './actions.d';
 
 export default class PersistentWebSocket {
 
@@ -14,10 +15,11 @@ export default class PersistentWebSocket {
 
   public authStatus: AuthStatus | undefined;
 
-  public onopen: () => void = () => {};
-  public onclose: (event: CloseEvent) => void = () => {};
-  public onauth: (authStatus: AuthStatus) => void = () => {};
-  public oninstances: (instances: InstanceType[]) => void = () => {};
+  public onOpen: () => void = () => {};
+  public onClose: (event: CloseEvent) => void = () => {};
+  public onAuth: (authStatus: AuthStatus) => void = () => {};
+  public onInstances: (instances: InstanceType[]) => void = () => {};
+  public onActionResponse: (response: ActionResponse) => void = () => {};
 
   constructor(url, token, protocols = [], initialReconnectInterval = 50, maxReconnectInterval = 5000) {
     this.url = url;
@@ -40,16 +42,17 @@ export default class PersistentWebSocket {
       console.log("WebSocket connected!");
       this.ws!.send(JSON.stringify({ token: this.token }));
       this.reconnectInterval = this.initialReconnectInterval;
-      this.onopen();
+      this.onOpen();
     };
 
     this.ws.onmessage = (event) => {
+      debugger;
       const message = JSON.parse(event.data);
 
       if (!this.authStatusReceived) {
         this.authStatusReceived = true;
         this.authStatus = message as AuthStatus;
-        this.onauth(this.authStatus);
+        this.onAuth(this.authStatus);
         if (this.authStatus.error) {
           console.error("Authentication Error:", this.authStatus.error);
           this.ws!.close();
@@ -57,7 +60,16 @@ export default class PersistentWebSocket {
         return;
       }
 
-      this.oninstances(message as InstanceType[]);
+      if (event.data[0] == '{') {
+        this.onActionResponse(message as ActionResponse);
+        return
+      }
+
+      if (event.data[0] == '[') {
+        this.oninstances(message as InstanceType[]);
+      }
+
+
     };
 
     this.ws.onclose = (event) => {
@@ -70,7 +82,7 @@ export default class PersistentWebSocket {
         this.reconnectInterval = Math.min(this.reconnectInterval * 2, this.maxReconnectInterval);
       }
 
-      this.onclose(event);
+      this.onClose(event);
     };
   }
 
