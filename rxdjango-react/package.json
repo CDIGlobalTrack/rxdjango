@@ -1,5 +1,5 @@
 {
-  "name": "rxdjango-react",
+  "name": "@rxdjango/react",
   "version": "0.0.1",
   "description": "React adapter for RxDjango",
   "main": "dist/index.js",
@@ -16,7 +16,7 @@
     "django",
     "react"
   ],
-  "author": "Luis Fagundes",
+  "author": "Luis Fagundes, Gabriel Furlan, Isaque Costa",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/CDIGlobalTrack/rxdjango/issues"
