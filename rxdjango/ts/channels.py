@@ -24,7 +24,7 @@ def create_app_channels(app):
     )
 
     code.extend([
-        f"import {{ StateChannel }} from 'lib/django-react';\n",
+        f"import {{ StateChannel }} from '@rxdjango/react';\n",
         f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
