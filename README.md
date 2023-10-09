@@ -1,7 +1,7 @@
-RX-Django
+RxDjango
 =========
 
-RX-Django is a layer over Django Channels aimed to make it as simple as possible to broadcast
+RxDjango is a layer over Django Channels aimed to make it as simple as possible to broadcast
 changes in Django models to browsers through websockets, with minimal latency.
 
 It's evolving in production for more than 2 years now and it's revised API has just been released
@@ -43,7 +43,7 @@ websocket_urlpatterns = [
 ]
 ```
 
-This is all the code it takes in the app! From that, RX-Django will generate all the frontend
+This is all the code it takes in the app! From that, RxDjango will generate all the frontend
 code required to keep state in sync between backend and frontend. For that, we need to configure
 settings.py with some information about the frontend.
 

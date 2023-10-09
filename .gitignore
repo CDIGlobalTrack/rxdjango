@@ -2,3 +2,5 @@
 build
 dist
 rxdjango.egg-info
+node_modules
+dist

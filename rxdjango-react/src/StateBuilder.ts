@@ -3,7 +3,7 @@ import { HandlerIndex } from './InstanceHandler.d';
 import { InstanceType, Model, ModelEntry } from './StateChannel.d';
 
 export default class StateBuilder<T> {
-  public state: T | undefined = {};
+  public state: T | undefined;
 
   private model: Model;
   private anchor: string;
@@ -67,10 +67,13 @@ export default class StateBuilder<T> {
   }
 
   private makeNestedIntanceHandlers(model: ModelEntry, instance: InstanceType) {
+    const _instance = instance as unknown as { [key: string]: any };
+
     for (const [property, instanceType] of Object.entries(model)) {
-      if (Array.isArray(instance[property])) {
+
+      if (Array.isArray(_instance[property])) {
         // this is a list
-        const ids = instance[property];
+        const ids = _instance[property];
 
         for (const id of ids) {
           const key = `${instanceType}:${id}`;
@@ -84,7 +87,7 @@ export default class StateBuilder<T> {
         }
       } else {
         // this is a foreing key
-        const key = `${instanceType}:${instance[property]}`;
+        const key = `${instanceType}:${_instance[property]}`;
 
         if (!this.handlers[key]) {
           const handler = this.makeInstanceHandler(key, property);
@@ -102,12 +105,14 @@ export default class StateBuilder<T> {
   }
 
   private getCascadeInstance(model: ModelEntry, instance: InstanceType) {
-    const state = { ...instance };
+    const _instance = instance as unknown as { [key: string]: any };
+    const state = { ..._instance };
 
     for (const [property, instanceType] of Object.entries(model)) {
-      if (Array.isArray(instance[property])) {
+
+      if (Array.isArray(_instance[property])) {
         // this is a list
-        state[property] = instance[property].map((id: number) => {
+        state[property] = _instance[property].map((id: number) => {
           const key = `${instanceType}:${id}`;
           const data = this.handlers[key]?.data;
 

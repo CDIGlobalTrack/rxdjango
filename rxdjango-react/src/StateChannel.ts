@@ -3,10 +3,12 @@ import StateBuilder from './StateBuilder';
 import { InstanceType, Listener, Model } from './StateChannel.d';
 
 abstract class StateChannel<T> {
-  private ws: PersistentWebsocket | undefined = undefined;
-  private builder: StateBuilder;
+  private ws: PersistentWebsocket | undefined;
+  private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
   private token: string;
+
+  protected args: { [key: string]: number | string } = {};
 
   abstract endpoint: string;
   abstract anchor: string;
@@ -33,14 +35,13 @@ abstract class StateChannel<T> {
   }
 
   private receiveInstances(instances: InstanceType[]) {
-    this.builder.update(instances);
+    this.builder!.update(instances);
     this.notify();
   }
 
   private notify() {
-    console.log(this.builder.state);
     for (const listener of this.listeners) {
-      if (this.builder.state) listener(this.builder.state);
+      if (this.builder!.state) listener(this.builder!.state);
     }
   }
 
@@ -75,9 +76,10 @@ abstract class StateChannel<T> {
       matches.forEach((match) => {
         // Extract the property name from the placeholder
         const propertyName = match.replace(/[{}]/g, "");
+        const propertyValue = this.args[propertyName];
 
         // Substitute the placeholder with the property value, if it exists
-        constructedEndpoint = constructedEndpoint.replace(match, this[propertyName]);
+        constructedEndpoint = constructedEndpoint.replace(match, propertyValue.toString());
       });
     }
 

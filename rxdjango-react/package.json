@@ -1,0 +1,36 @@
+{
+  "name": "@rxdjango/react",
+  "version": "0.0.1",
+  "description": "React adapter for RxDjango",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsc -p tsconfig.json --watch",
+    "build": "tsc -p tsconfig.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CDIGlobalTrack/rxdjango.git"
+  },
+  "keywords": [
+    "django",
+    "react"
+  ],
+  "author": "Luis Fagundes, Gabriel Furlan, Isaque Costa",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/CDIGlobalTrack/rxdjango/issues"
+  },
+  "homepage": "https://github.com/CDIGlobalTrack/rxdjango#readme",
+  "devDependencies": {
+    "@types/react": "^18.2.24",
+    "@types/react-dom": "^18.2.8",
+    "ts-node": "^10.9.1",
+    "tsup": "^7.2.0",
+    "typescript": "^5.2.2"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  }
+}
