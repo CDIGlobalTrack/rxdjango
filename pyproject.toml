@@ -1,6 +1,6 @@
 [project]
 name = "rxdjango"
-version = "0.0.3"
+version = "0.0.7"
 authors = [
   { name="Luis Fagundes", email="lhfagundes@gmail.com" },
 ]
@@ -18,4 +18,4 @@ classifiers = [
 "Bug Tracker" = "https://github.com/CDIGlobalTrack/rxdjango/issues"
 
 [tool.setuptools]
-package-dir = {"" = "rxdjango"}
+package-dir = {"" = "./rxdjango"}
