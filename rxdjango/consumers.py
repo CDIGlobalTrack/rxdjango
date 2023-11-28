@@ -46,6 +46,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         token = data.get('token', None)
         last_update  = data.get('last_update', None)
 
+        user = None
         try:
             user = await self.authenticate(token=token)
         except UnauthorizedError:
