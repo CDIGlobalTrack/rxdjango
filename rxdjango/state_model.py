@@ -44,6 +44,8 @@ class StateModel:
         self.index[self.instance_type].append(self)
 
         self.user_key = getattr(meta, 'user_key', None)
+        if self.user_key and self.user_key not in meta.fields:
+            raise ProgrammingError(f'{state_serializer.__class__.__name__}.Meta declares user_key="{self.user_key}", but "{self.user_key}" is not in fields')
         self.optimistic = getattr(meta, 'optimistic', False)
         self.optimistic_timeout = getattr(meta, 'optimistic_timeout', 3)
 
@@ -131,7 +133,8 @@ class StateModel:
     def _mark(self, serialized, tstamp):
         serialized['_instance_type'] = self.instance_type
         serialized['_tstamp'] = tstamp
-        serialized['_user_key'] = self.user_key
+        if self.user_key:
+            serialized['_user_key'] = getattr(serialized, self.user_key, None)
         serialized['_operation'] = 'initial_state'
         return serialized
 
