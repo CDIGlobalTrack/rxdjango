@@ -68,8 +68,6 @@ class SignalHandler:
             except sender.DoesNotExist:
                 return # Should not happen, but who knows
             acessor = layer.reverse_acessor
-            if acessor.endswith('_ptr'):
-                acessor = acessor[:-4]
             try:
                 old_parent = getattr(current, acessor)
             except AttributeError as e:
@@ -93,6 +91,8 @@ class SignalHandler:
                 tstamp = sync_get_tstamp()
                 created = kwargs.get('created', None)
                 _relay_instance(layer, instance, tstamp, created)
+                if not layer.origin:
+                    return
                 if created or getattr(instance, '__parent_updated', False):
                     parent = getattr(instance, layer.reverse_acessor, None)
                     _relay_instance(layer.origin, parent, tstamp, False)
