@@ -44,18 +44,60 @@ class SignalHandler:
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
                 serialized = layer.serialize_instance(instance, tstamp)
-                created = kwargs.get('created', None)
-                serialized['_operation'] = 'create' if created else 'update'
+                if kwargs.get('created', False):
+                    # Doesn't matter to optimistically send new object if
+                    # referring instance is not updated
+                    # This can be implemented by sending a patch on the parent,
+                    # using only the id, without hitting the database
+                    return
+
+                serialized['_operation'] = 'update'
                 serialized['_optimistic'] = True
                 self._schedule(serialized, layer)
+
+        def prepare_save(sender, instance, **kwargs):
+            # Check if this instance has changed parent
+            # If so we need to relay the old and new parent
+            if not layer.reverse_acessor:
+                return
+            if kwargs.get('created', False):
+                instance.__parent_updated = True
+                return
+            try:
+                current = sender.objects.get(pk=instance.pk)
+            except sender.DoesNotExist:
+                return # Should not happen, but who knows
+            acessor = layer.reverse_acessor
+            try:
+                old_parent = getattr(current, acessor)
+            except AttributeError as e:
+                # This is a bug in RxDjango.
+                # While we don't fix it, let's not break things
+                return
+            new_parent = getattr(instance, acessor)
+            if new_parent != old_parent:
+                instance.__parent_updated = True
+                instance.__old_parent = old_parent
+
+        def _relay_instance(_layer, instance, tstamp, created):
+            if not instance:
+                return
+            serialized = _layer.serialize_instance(instance, tstamp)
+            serialized['_operation'] = 'create' if created else 'update'
+            self._schedule(serialized, layer)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
-                serialized = layer.serialize_instance(instance, tstamp)
                 created = kwargs.get('created', None)
-                serialized['_operation'] = 'create' if created else 'update'
-                self._schedule(serialized, layer)
+                _relay_instance(layer, instance, tstamp, created)
+                if not layer.origin:
+                    return
+                if created or getattr(instance, '__parent_updated', False):
+                    parent = getattr(instance, layer.reverse_acessor, None)
+                    _relay_instance(layer.origin, parent, tstamp, False)
+                    old_pa = getattr(instance, '__old_parent', None)
+                    _relay_instance(layer.origin, old_pa, tstamp, False)
 
         def prepare_deletion(sender, instance, **kwargs):
             """Obtain anchors prior to deletion and store in instance"""
@@ -72,9 +114,6 @@ class SignalHandler:
                 self._schedule(serialized, layer, instance._anchors)
 
         uid = '-'.join(['cache', self.name] + layer.instance_path)
-        from account.models import User
-        if layer.model is User:
-            pass #import ipdb; ipdb.set_trace()
 
         if layer.optimistic:
             pre_save.connect(
@@ -83,6 +122,13 @@ class SignalHandler:
                 dispatch_uid=f'{uid}-optimistic',
                 weak=False,
             )
+
+        pre_save.connect(
+            prepare_save,
+            sender=layer.model,
+            dispatch_uid=f'{uid}-prepare-save',
+            weak=False,
+        )
 
         post_save.connect(
             relay_instance,

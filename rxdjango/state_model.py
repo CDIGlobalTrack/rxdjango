@@ -218,7 +218,7 @@ class StateModel:
                 self,
                 field_name,
                 field_name,
-                descriptor.related.get_related_field().name,
+                descriptor.related.remote_field.name,
             )
 
         if isinstance(descriptor, property):
