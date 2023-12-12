@@ -22,7 +22,7 @@ class RelatedProperty:
     def __init__(self, accessor, reverse):
         self.accessor = accessor
         self.reverse = reverse
-        
+
     def __call__(self, fget):
         self.fget = fget
         key = (fget.__module__, fget.__qualname__)

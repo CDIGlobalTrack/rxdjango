@@ -43,14 +43,14 @@ class SignalHandler:
         def relay_instance_optimistically(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
-                serialized = layer.serialize_instance(instance, tstamp)
-                if kwargs.get('created', False):
+                if not instance.id:
                     # Doesn't matter to optimistically send new object if
                     # referring instance is not updated
                     # This can be implemented by sending a patch on the parent,
                     # using only the id, without hitting the database
                     return
 
+                serialized = layer.serialize_instance(instance, tstamp)
                 serialized['_operation'] = 'update'
                 serialized['_optimistic'] = True
                 self._schedule(serialized, layer)
@@ -82,7 +82,7 @@ class SignalHandler:
         def _relay_instance(_layer, instance, tstamp, created):
             if not instance:
                 return
-            
+
             if isinstance(instance, models.Model):
                 instances = [instance]
             elif isinstance(instance, models.Manager):
@@ -94,8 +94,6 @@ class SignalHandler:
                 serialized = _layer.serialize_instance(_instance, tstamp)
                 serialized['_operation'] = 'create' if created else 'update'
                 self._schedule(serialized, layer)
-
-            
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
