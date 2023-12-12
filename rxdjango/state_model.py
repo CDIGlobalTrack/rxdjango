@@ -133,9 +133,11 @@ class StateModel:
     def _mark(self, serialized, tstamp):
         serialized['_instance_type'] = self.instance_type
         serialized['_tstamp'] = tstamp
+        serialized['_operation'] = 'initial_state'
         if self.user_key:
             serialized['_user_key'] = getattr(serialized, self.user_key, None)
-        serialized['_operation'] = 'initial_state'
+        else:
+            serialized['_user_key'] = None
         return serialized
 
     def _disassemble_nested(self):
