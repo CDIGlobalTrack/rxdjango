@@ -10,17 +10,24 @@ def get_accessor(model, property_name):
     return RelatedProperty.get_accessor(model, property_name)
 
 
+def get_reverse_accessor(model, property_name):
+    return RelatedProperty.get_reverse_accessor(model, property_name)
+
+
 class RelatedProperty:
     accessors = {}
+    reverses = {}
     unknown_properties = set()
 
-    def __init__(self, accessor=None):
+    def __init__(self, accessor, reverse):
         self.accessor = accessor
-
+        self.reverse = reverse
+        
     def __call__(self, fget):
         self.fget = fget
         key = (fget.__module__, fget.__qualname__)
         RelatedProperty.accessors[key] = self.accessor
+        RelatedProperty.reverses[key] = self.reverse
         return property(self._get_wrapper())
 
     def _get_wrapper(self):
@@ -40,6 +47,20 @@ class RelatedProperty:
                 raise UnknownProperty(
                     f'Unknown property {name}, use {module}.related_property '
                     'decorator instead to provide an acessor'
+                )
+
+    @classmethod
+    def get_reverse_accessor(cls, model, property_name):
+        key = _make_key(model, property_name)
+        try:
+            return cls.reverses[key]
+        except KeyError:
+            if key in cls.unknown_properties:
+                name = '.'.join(key)
+                module = cls.__module__
+                raise UnknownProperty(
+                    f'Unknown property {name}, use {module}.related_property '
+                    'decorator instead to provide a reverse acessor'
                 )
 
     @classmethod

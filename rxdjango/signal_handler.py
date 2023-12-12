@@ -2,7 +2,7 @@ from collections import defaultdict
 from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
                                       post_migrate)
-from django.db import transaction
+from django.db import transaction, models, ProgrammingError
 from .mongo import MongoSignalWriter
 from .redis import RedisSession, sync_get_tstamp
 
@@ -82,19 +82,32 @@ class SignalHandler:
         def _relay_instance(_layer, instance, tstamp, created):
             if not instance:
                 return
-            serialized = _layer.serialize_instance(instance, tstamp)
-            serialized['_operation'] = 'create' if created else 'update'
-            self._schedule(serialized, layer)
+            
+            if isinstance(instance, models.Model):
+                instances = [instance]
+            elif isinstance(instance, models.Manager):
+                instances = instance.all()
+            else:
+                raise ProgrammingError()
+
+            for _instance in instances:
+                serialized = _layer.serialize_instance(_instance, tstamp)
+                serialized['_operation'] = 'create' if created else 'update'
+                self._schedule(serialized, layer)
+
+            
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
                 created = kwargs.get('created', None)
                 _relay_instance(layer, instance, tstamp, created)
-                if not layer.origin:
+                if not layer.origin or not layer.reverse_acessor:
                     return
                 if created or getattr(instance, '__parent_updated', False):
-                    parent = getattr(instance, layer.reverse_acessor, None)
+                    parent = instance
+                    for reverse_acessor in layer.reverse_acessor.split('.'):
+                        parent = getattr(parent, reverse_acessor, None)
                     _relay_instance(layer.origin, parent, tstamp, False)
                     old_pa = getattr(instance, '__old_parent', None)
                     _relay_instance(layer.origin, old_pa, tstamp, False)
