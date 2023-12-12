@@ -5,7 +5,7 @@ from django.db import ProgrammingError
 from django.db.models.fields import related_descriptors
 from .ts import export_interface
 from .exceptions import UnknownProperty
-from .related_properties import is_related_property, get_accessor
+from .related_properties import is_related_property, get_accessor, get_reverse_accessor
 
 class StateModel:
 
@@ -228,6 +228,7 @@ class StateModel:
 
         if isinstance(descriptor, property):
             query_property = get_accessor(self.model, field_name)
+            reverse_acessor = get_reverse_accessor(self.model, field_name)
             if not query_property:
                 my_module = self.__class__.__module__
                 raise UnknownProperty(
@@ -244,7 +245,7 @@ class StateModel:
                 self,
                 field_name,
                 query_property,
-                None,
+                reverse_acessor,
             )
 
 
