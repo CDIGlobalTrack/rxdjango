@@ -3,6 +3,7 @@ from datetime import datetime
 from copy import copy
 from decimal import Decimal
 import pymongo
+import gridfs
 from motor import motor_asyncio
 from django.db import ProgrammingError
 from django.conf import settings
@@ -19,8 +20,8 @@ class MongoStateSession:
         self._tstamp = None
 
         client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
-        db = client[settings.MONGO_STATE_DB]
-        self.collection = db[channel.__class__.__name__.lower()]
+        self.db = client[settings.MONGO_STATE_DB]
+        self.collection = self.db[channel.__class__.__name__.lower()]
 
     async def tstamp(self):
         if self._tstamp:
@@ -39,8 +40,18 @@ class MongoStateSession:
             }
 
             async for instance in self.collection.find(query):
+                try:
+                    grid_ref = instance['_grid_ref']
+                except KeyError:
+                    pass
+                else:
+                    fs = gridfs.GridFS(self.db)
+                    serialized = fs.get(grid_ref)
+                    instance = json.loads(serialized.decode())
+
                 del instance['_id']
                 del instance['_anchor_id']
+
                 instances.append(instance)
 
             if instances:
@@ -69,8 +80,8 @@ class MongoStateSession:
 class MongoSignalWriter:
     def __init__(self, channel_class):
         client = pymongo.MongoClient(settings.MONGO_URL)
-        db = client[settings.MONGO_STATE_DB]
-        self.collection = db[channel_class.__name__.lower()]
+        self.db = client[settings.MONGO_STATE_DB]
+        self.collection = self.db[channel_class.__name__.lower()]
 
     def init_database(self):
         # Make a new connection, because this needs to be sync
@@ -99,16 +110,37 @@ class MongoSignalWriter:
             instance = _adapt(instance)
             instance['_anchor_id'] = anchor_id
             assert instance['_tstamp']
-            self.collection.replace_one(
-                {
+            try:
+                self.collection.replace_one(
+                    {
+                        '_anchor_id': anchor_id,
+                        '_instance_type': instance['_instance_type'],
+                        'id': instance['id'],
+                    },
+                    instance,
+                    upsert=True,
+                )
+            except pymongo.errors.DocumentTooLarge:
+                data = json.dumps(instance).encode()
+                fs = gridfs.GridFS(self.db)
+                grid_ref = fs.put(data)
+
+                instance = {
                     '_anchor_id': anchor_id,
                     '_instance_type': instance['_instance_type'],
                     'id': instance['id'],
-                },
-                instance,
-                upsert=True,
-            )
-            pass
+                    '_grid_ref': grid_ref,
+                }
+
+                self.collection.replace_one(
+                    {
+                        '_anchor_id': anchor_id,
+                        '_instance_type': instance['_instance_type'],
+                        'id': instance['id'],
+                    },
+                    instance,
+                    upsert=True,
+                )
 
 
 def _adapt(instance):

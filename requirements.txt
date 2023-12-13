@@ -3,3 +3,4 @@ motor>=3.3
 channels>=4
 channels-redis>=4.1
 djangorestframework>=3
+bson>=0.5
