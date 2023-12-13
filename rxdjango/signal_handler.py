@@ -93,7 +93,7 @@ class SignalHandler:
             for _instance in instances:
                 serialized = _layer.serialize_instance(_instance, tstamp)
                 serialized['_operation'] = 'create' if created else 'update'
-                self._schedule(serialized, layer)
+                self._schedule(serialized, _layer)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
