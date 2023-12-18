@@ -8,7 +8,7 @@ from motor import motor_asyncio
 from django.db import ProgrammingError
 from django.conf import settings
 from .redis import get_tstamp, sync_get_tstamp
-
+from .serialize import json_dumps
 
 class MongoStateSession:
 
@@ -121,7 +121,7 @@ class MongoSignalWriter:
                     upsert=True,
                 )
             except pymongo.errors.DocumentTooLarge:
-                data = json.dumps(instance).encode()
+                data = json_dumps(instance).encode()
                 fs = gridfs.GridFS(self.db)
                 grid_ref = fs.put(data)
 

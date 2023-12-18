@@ -1,6 +1,8 @@
 import json
 from asgiref.sync import async_to_sync
 import channels.layers
+from rxdjango.serialize import json_dumps
+
 
 def get_channel_key(name, anchor_id, user_id=None):
     if user_id is None:
@@ -36,7 +38,7 @@ class WebsocketRouter:
 
         # FIXME: Datetime fields should be handled prior to this
         # This is probably due to properties such as launch_time
-        payload = json.dumps(payload, default=str)
+        payload = json_dumps(payload)
         payload = json.loads(payload)
 
         await channel_layer.group_send(

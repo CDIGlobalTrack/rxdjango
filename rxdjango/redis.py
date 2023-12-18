@@ -3,6 +3,7 @@ import redis
 from asgiref.sync import async_to_sync
 from django.utils.functional import cached_property
 from django.conf import settings
+from rxdjango.serialize import json_dumps
 
 
 async def _connect():
@@ -261,7 +262,7 @@ class RedisStateSession(RedisSession):
         Args:
             objects (list): List of objects to append to the instances list.
         """
-        serialized_instances = [json.dumps(instance, default=str) for instance in instances]
+        serialized_instances = [json_dumps(instance) for instance in instances]
 
         script = """
         -- Append the serialized instances to instances list

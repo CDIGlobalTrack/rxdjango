@@ -10,6 +10,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
 from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
+from rxdjango.serialize import json_dumps
 
 
 class StateConsumer(AsyncWebsocketConsumer):
@@ -84,7 +85,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 
             async for instances in loader.list_instances():
                 if instances:
-                    data = json.dumps(instances, default=str)
+                    data = json_dumps(instances)
                     await self.send(text_data=data)
 
             self.tstamp = loader.tstamp
@@ -92,7 +93,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 
     @property
     def end_of_data(self):
-        return json.dumps([{
+        return json_dumps([{
             '_instance_type': '',
             '_tstamp': self.tstamp,
             '_operation': 'end_initial_state',
@@ -137,7 +138,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 
     async def relay(self, payload):
         payload = payload['payload']
-        await self.send(text_data=json.dumps(payload, default=str))
+        await self.send(text_data=json_dumps(payload))
 
     async def receive_command(self, text_data):
         # If user is logged, we expect a JSON command
@@ -152,6 +153,6 @@ class StateConsumer(AsyncWebsocketConsumer):
         data['status_code'] = status_code
         if error:
             data['error'] = error
-        text_data = json.dumps(data)
+        text_data = json_dumps(data)
         close = error != None
         await self.send(text_data=text_data, close=close)
