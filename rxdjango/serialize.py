@@ -1,6 +1,6 @@
 import json
 from pytz import utc
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 def default_serializer(value):
@@ -11,5 +11,5 @@ def default_serializer(value):
     return str(value)
 
 
-def json_dumps(value):
-    return json_dumps(value)
+def json_dumps(value):    
+    return json.dumps(value, default=default_serializer)
