@@ -175,7 +175,7 @@ class SignalHandler:
 
     def _relay(self, serialized, state_model, anchors):
         """Send one update for both cache and connected clients"""
-        user_id = serialized.pop('_user_key', None)
+        user_id = serialized.get('_user_key', None)
         payload = [serialized]
         #print(f'Relay from {serialized["_instance_type"]}')
         if anchors is None:
