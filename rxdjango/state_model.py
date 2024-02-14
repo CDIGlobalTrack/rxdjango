@@ -135,7 +135,7 @@ class StateModel:
         serialized['_tstamp'] = tstamp
         serialized['_operation'] = 'initial_state'
         if self.user_key:
-            serialized['_user_key'] = getattr(serialized, self.user_key, None)
+            serialized['_user_key'] = serialized.get(self.user_key, None)
         else:
             serialized['_user_key'] = None
         return serialized
