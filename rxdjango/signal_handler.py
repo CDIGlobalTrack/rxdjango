@@ -80,18 +80,27 @@ class SignalHandler:
                 instance.__old_parent = old_parent
 
         def _relay_instance(_layer, instance, tstamp, created):
+            # This method may receive instances as objectse or already
+            # serialized. broadcast_instance allows this so microservices
+            # can send optimistic updates
+
             if not instance:
                 return
 
-            if isinstance(instance, models.Model):
-                instances = [instance]
-            elif isinstance(instance, models.Manager):
-                instances = instance.all()
+            if isinstance(instance, models.Manager) or isinstance(instance, list):
+                instances = instance
             else:
-                raise ProgrammingError()
+                instances = [instance]
 
             for _instance in instances:
-                serialized = _layer.serialize_instance(_instance, tstamp)
+                if isinstance(_instance, models.Model):
+                    serialized = _layer.serialize_instance(_instance, tstamp)
+                elif isinstance(_instance, dict):
+                    serialized = _instance
+                else:
+                    cls = _instance.__class__
+                    raise ProgrammingError(f'Cannot relay instance of type {cls}')
+
                 serialized['_operation'] = 'create' if created else 'update'
                 self._schedule(serialized, _layer)
 
