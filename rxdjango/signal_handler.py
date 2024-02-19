@@ -79,7 +79,7 @@ class SignalHandler:
                 instance.__parent_updated = True
                 instance.__old_parent = old_parent
 
-        def _relay_instance(_layer, instance, tstamp, created):
+        def _relay_instance(_layer, instance, tstamp, operation):
             if not instance:
                 return
 
@@ -91,24 +91,31 @@ class SignalHandler:
                 raise ProgrammingError()
 
             for _instance in instances:
-                serialized = _layer.serialize_instance(_instance, tstamp)
-                serialized['_operation'] = 'create' if created else 'update'
+                if operation == 'delete':
+                    serialized = _layer.serialize_delete(_instance, tstamp)
+                else:
+                    serialized = _layer.serialize_instance(_instance, tstamp)
+                serialized['_operation'] = operation
+
                 self._schedule(serialized, _layer)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
                 created = kwargs.get('created', None)
-                _relay_instance(layer, instance, tstamp, created)
+                operation = kwargs.get('_operation', 'update' if created else 'create')
+                if operation == 'create':
+                    created = True
+                _relay_instance(layer, instance, tstamp, operation)
                 if not layer.origin or not layer.reverse_acessor:
                     return
                 if created or getattr(instance, '__parent_updated', False):
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
                         parent = getattr(parent, reverse_acessor, None)
-                    _relay_instance(layer.origin, parent, tstamp, False)
+                    _relay_instance(layer.origin, parent, tstamp, operation)
                     old_pa = getattr(instance, '__old_parent', None)
-                    _relay_instance(layer.origin, old_pa, tstamp, False)
+                    _relay_instance(layer.origin, old_pa, tstamp, operation)
 
         def prepare_deletion(sender, instance, **kwargs):
             """Obtain anchors prior to deletion and store in instance"""
@@ -186,9 +193,9 @@ class SignalHandler:
             self.mongo.write_instances(anchor.id, payload)
 
     def broadcast_instance(self, anchor_id, instance, operation='update'):
-        kwargs = {}
-        if operation == 'created':
-            kwargs['created'] = True
+        kwargs = {
+            '_operation': operation
+        }
         sender = instance.__class__
         for relay_instance in self.relay_map[sender]:
             relay_instance(sender, instance, **kwargs)
