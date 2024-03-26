@@ -79,12 +79,12 @@ class MongoStateSession:
 
 class MongoSignalWriter:
     def __init__(self, channel_class):
+        # Make a new connection, because this needs to be sync
         client = pymongo.MongoClient(settings.MONGO_URL)
         self.db = client[settings.MONGO_STATE_DB]
         self.collection = self.db[channel_class.__name__.lower()]
 
     def init_database(self):
-        # Make a new connection, because this needs to be sync
         self.collection.drop()
 
         self.collection.create_index(
@@ -106,21 +106,27 @@ class MongoSignalWriter:
         )
 
     def write_instances(self, anchor_id, instances):
+        deltas = []
+
         for instance in instances:
             instance = _adapt(instance)
             instance['_anchor_id'] = anchor_id
             assert instance['_tstamp']
             try:
-                self.collection.replace_one(
+                original = self.collection.find_one_and_update(
                     {
                         '_anchor_id': anchor_id,
                         '_instance_type': instance['_instance_type'],
                         'id': instance['id'],
+                    }, {
+                        '$set': instance,
                     },
-                    instance,
                     upsert=True,
                 )
+                if original:
+                    del original['_id']
             except pymongo.errors.DocumentTooLarge:
+                original = None
                 data = json_dumps(instance).encode()
                 fs = gridfs.GridFS(self.db)
                 grid_ref = fs.put(data)
@@ -141,6 +147,27 @@ class MongoSignalWriter:
                     instance,
                     upsert=True,
                 )
+
+            if original is None:
+                deltas.append(instance)
+            else:
+                empty = True
+                for key, old_value in original.items():
+                    if key == 'id' or key.startswith('_'):
+                        continue
+                    new_value = instance[key]
+                    if isinstance(new_value, list):
+                        old_value = set(old_value)
+                        new_value = set(new_value)
+                    if new_value == old_value:
+                        del instance[key]
+                    else:
+                        empty = False
+
+                if not empty:
+                    deltas.append(instance)
+
+        return deltas
 
 
 def _adapt(instance):
