@@ -110,37 +110,15 @@ class MongoSignalWriter:
             instance = _adapt(instance)
             instance['_anchor_id'] = anchor_id
             assert instance['_tstamp']
-            try:
-                self.collection.replace_one(
-                    {
-                        '_anchor_id': anchor_id,
-                        '_instance_type': instance['_instance_type'],
-                        'id': instance['id'],
-                    },
-                    instance,
-                    upsert=True,
-                )
-            except pymongo.errors.DocumentTooLarge:
-                data = json_dumps(instance).encode()
-                fs = gridfs.GridFS(self.db)
-                grid_ref = fs.put(data)
-
-                instance = {
+            self.collection.replace_one(
+                {
                     '_anchor_id': anchor_id,
                     '_instance_type': instance['_instance_type'],
                     'id': instance['id'],
-                    '_grid_ref': grid_ref,
-                }
-
-                self.collection.replace_one(
-                    {
-                        '_anchor_id': anchor_id,
-                        '_instance_type': instance['_instance_type'],
-                        'id': instance['id'],
-                    },
-                    instance,
-                    upsert=True,
-                )
+                },
+                instance,
+                upsert=True,
+            )
 
 
 def _adapt(instance):
