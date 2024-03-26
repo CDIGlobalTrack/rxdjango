@@ -29,7 +29,6 @@ export default class StateBuilder<T> {
 
   private receiveInstance(instance: InstanceType) {
     const key = `${instance._instance_type}:${instance.id}`;
-
     if (instance._instance_type === this.anchor) {
       // This is an anchor
       this.receiveAnchorInstance(key, instance);

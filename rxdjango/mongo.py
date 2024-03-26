@@ -4,6 +4,7 @@ from copy import copy
 from decimal import Decimal
 import pymongo
 import gridfs
+import dictdiffer
 from motor import motor_asyncio
 from django.db import ProgrammingError
 from django.conf import settings
@@ -106,21 +107,24 @@ class MongoSignalWriter:
         )
 
     def write_instances(self, anchor_id, instances):
+        deltas = []
         for instance in instances:
             instance = _adapt(instance)
             instance['_anchor_id'] = anchor_id
             assert instance['_tstamp']
             try:
-                self.collection.replace_one(
+                original = self.collection.find_one_and_update(
                     {
                         '_anchor_id': anchor_id,
                         '_instance_type': instance['_instance_type'],
                         'id': instance['id'],
+                    }, {
+                        '$set': instance,
                     },
-                    instance,
                     upsert=True,
                 )
             except pymongo.errors.DocumentTooLarge:
+                original = None
                 data = json_dumps(instance).encode()
                 fs = gridfs.GridFS(self.db)
                 grid_ref = fs.put(data)
@@ -141,6 +145,35 @@ class MongoSignalWriter:
                     instance,
                     upsert=True,
                 )
+
+            if original is None:
+                deltas.append(instance)
+            else:
+                del original['_id']
+
+                original['_tstamp'] = instance['_tstamp']
+                original['_operation'] = instance['_operation']
+                try:
+                    original['_optimistic'] = instance['_optimistic']
+                except KeyError:
+                    pass
+                delta = []
+                for op, key, change in dictdiffer.diff(original, instance):
+                    if op == 'change':
+                        delta.append((key, change[1]))
+
+                deltas.append({
+                    '_instance_type': instance['_instance_type'],
+                    'id': instance['id'],
+                    '_operation': instance['_operation'],
+                    '_tstamp': instance['_tstamp'],
+                    '_delta': delta,
+                })
+                #deltas.pop()
+                #deltas.append(instance)
+
+
+        return deltas
 
 
 def _adapt(instance):
