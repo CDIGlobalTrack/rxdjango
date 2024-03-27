@@ -8,6 +8,11 @@ export type ModelEntry = {
   [key: string]: string;
 }
 
+export interface Delta {
+  _tstamp: number;
+  _delta: [string, any][];
+}
+
 export interface InstanceType {
   id: number;
   _instance_type: string;
