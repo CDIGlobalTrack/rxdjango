@@ -95,7 +95,6 @@ class SignalHandler:
                 serialized['_operation'] = 'create' if created else 'update'
                 self._schedule(serialized, _layer)
 
-
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
