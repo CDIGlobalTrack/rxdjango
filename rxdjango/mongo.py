@@ -148,14 +148,20 @@ class MongoSignalWriter:
                     upsert=True,
                 )
 
-            if original is None:
+            if original is None or instance['_operation'] == 'delete':
                 deltas.append(instance)
             else:
                 empty = True
                 for key, old_value in original.items():
                     if key == 'id' or key.startswith('_'):
                         continue
-                    new_value = instance[key]
+                    try:
+                        new_value = instance[key]
+                    except KeyError:
+                        # An exception in a property may have generated
+                        # an incomplete serialized object.
+                        # TODO emit a warning
+                        continue
                     if isinstance(new_value, list):
                         old_value = set(old_value)
                         new_value = set(new_value)
