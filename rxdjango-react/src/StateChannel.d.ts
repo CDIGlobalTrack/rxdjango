@@ -14,10 +14,10 @@ export interface InstanceType {
   _operation: string;
   _tstamp: number;
   _deleted?: boolean;
-  _loaded: true;
+  _loaded?: boolean;
 }
 
-export interface UnloadedInstance {
+export interface UnloadedInstance extends IntanceType {
   id: number;
   _loaded: false;
 }

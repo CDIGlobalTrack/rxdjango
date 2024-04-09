@@ -1,6 +1,6 @@
 import InstanceHandler from './InstanceHandler';
 import { HandlerIndex } from './InstanceHandler.d';
-import { InstanceType, Model, ModelEntry } from './StateChannel.d';
+import { InstanceType, Model, UnloadedInstance } from './StateChannel.d';
 
 export default class StateBuilder<T> {
   public state: T | undefined;
@@ -24,11 +24,16 @@ export default class StateBuilder<T> {
   private receiveInstance(instance: InstanceType) {
     if (this.state === undefined) {
       if (instance._instance_type !== this.anchor) {
-        console.log(instance);
         throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
       }
+
       this.state = this.convert(instance) as T;
-    }
+      return;
+    };
+  }
+
+  private getUnloadedInstance(id: number, instanceType: string) {
+    return { id, _instance_type: instanceType, _operation: 'create', _tstamp: 0, _loaded: false } as UnloadedInstance;
   }
 
   private convert(instance: InstanceType): InstanceType {
@@ -39,9 +44,10 @@ export default class StateBuilder<T> {
     for (const [property, instanceType] of Object.entries(model)) {
       if (Array.isArray(_instance[property])) {
         const ids = _instance[property] as number[];
-        newInstance[property] = new Array(ids.length).fill(null);
+        newInstance[property] = ids.map((id) => this.getUnloadedInstance(id, instanceType));
       }
     }
+    
     return newInstance as unknown as InstanceType;
   }
 
