@@ -14,6 +14,12 @@ export interface InstanceType {
   _operation: string;
   _tstamp: number;
   _deleted?: boolean;
+  _loaded: true;
+}
+
+export interface UnloadedInstance {
+  id: number;
+  _loaded: false;
 }
 
 export interface AuthStatus {
