@@ -28,12 +28,12 @@ describe('StateBuilder', () => {
     stateBuilder = new StateBuilder<ProjectType>(MODEL, ANCHOR);
   });
 
-  it('should be created with the correct initial properties', () => {
+  it('is initialized with an undefined state', () => {
     expect(stateBuilder).toBeDefined();
     expect(stateBuilder.state).toBeUndefined();
   });
 
-  it('anchor is received', () => {
+  it('creates state with anchor data when it is received', () => {
     const instance = { name: 'Project #1', ...header('ProjectSerializer', 1) } as ProjectType;
     const instances = [instance];
     stateBuilder.update(instances);
@@ -41,7 +41,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.name).toBe('Project #1');
   });
 
-  it('empty list of related objects is preserved', () => {
+  it('initializes related sets with empty lists when there are no related instances', () => {
     const instances = [{
         ...header('ProjectSerializer', 1),
         name: 'Project #1',
@@ -55,7 +55,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.tasks).toEqual([]);
   });
 
-  it('related objects are initialized as unloaded object', () => {
+  it('initializes related sets with UnloadedInstance objects', () => {
     const instance = { name: 'Project #1', tasks: [1, 2, 3], ...header('ProjectSerializer', 1) };
     const instances = [instance];
 
@@ -69,7 +69,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state?.tasks?.[2].id).toEqual(3);
   });
 
-  it('related object is initialized', () => {
+  it('loads related sets when data is received', () => {
     const projectInstance: ProjectPayload = {
       ...header('ProjectSerializer', 1),
       name: 'Project #1',
@@ -88,6 +88,25 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.tasks?.[1].id).toEqual(2);
     expect(stateBuilder.state!.tasks?.[1].name).toEqual(undefined);
     expect(stateBuilder.state!.tasks?.[1]._loaded).toEqual(false);
+  });
+
+  it('preserves the object reference when it is loaded', () => {
+    const projectInstance: ProjectPayload = {
+      ...header('ProjectSerializer', 1),
+      name: 'Project #1',
+      tasks: [1, 2, 3],
+    };
+    const taskInstance: TaskPayload = {
+      ...header('TaskSerializer', 1),
+      name: 'Task #1',
+    };
+
+    stateBuilder.update([projectInstance]);
+    const task = stateBuilder.state!.tasks![0];
+    expect(task._loaded).toEqual(false);
+    stateBuilder.update([taskInstance]);
+    expect(stateBuilder.state!.tasks![0]).toBe(task);
+    expect(task._loaded).toEqual(true);
   });
 
 });
