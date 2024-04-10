@@ -11,19 +11,28 @@ from django.conf import settings
 from rest_framework import serializers, relations, fields
 from . import ts_exported, header, interface_name
 
-
 def create_app_interfaces(app):
-    try:
-        module = importlib.import_module(f'{app}.serializers')
-    except ModuleNotFoundError:
-        return
+    serializer_module_name = f'{app}.serializers'
+    serializer_path = serializer_module_name.replace('.', '/') + '.py'
+
+    ts_file_path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.interfaces.d.ts')
+    py_mtime = None
+
+    if os.path.exists(serializer_path):
+        py_mtime = os.path.getmtime(serializer_path)
 
     existing = []
 
-    path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.interfaces.d.ts')
+    if os.path.exists(ts_file_path):
+        if py_mtime == os.path.getmtime(ts_file_path):
+            return
+        with open(ts_file_path, 'r') as file:
+            existing = file.read().split('\n')
 
-    if os.path.exists(path):
-        existing = open(path).read().split('\n')
+    try:
+        module = importlib.import_module(serializer_module_name)
+    except ModuleNotFoundError:
+        return
 
     serializers = get_serializers(module)
 
@@ -31,9 +40,6 @@ def create_app_interfaces(app):
         module_serializers = serializers.pop(app)
     except KeyError:
         return
-
-    now = timezone.now().strftime('%Y-%m-%d %H:%M')
-    tz = timezone.now().tzinfo
 
     code = header(
         app,
@@ -45,15 +51,15 @@ def create_app_interfaces(app):
     code.append(f"import {{ InstanceType }} from '@rxdjango/react';\n")
 
     for external_app, dependencies in serializers.items():
-        dependencies = [ dep for dep in dependencies if ts_exported(dep) ]
+        dependencies = [dep for dep in dependencies if ts_exported(dep)]
         if not dependencies:
             continue
         code.append(''.join([
             'import { ',
-            ', '.join([ interface_name(d) for d in dependencies ]),
+            ', '.join([interface_name(d) for d in dependencies]),
             ' } from ',
             f"'../{external_app}/{external_app}.interfaces';",
-            ]))
+        ]))
 
     code.append('')  # line break
 
@@ -61,7 +67,7 @@ def create_app_interfaces(app):
         if ts_exported(Serializer):
             code.append(serialize_type(Serializer))
 
-    if len(code) == initial_length + 1:
+    if len(code) == initial_length + 2:
         return
 
     content = '\n'.join(code)
@@ -70,12 +76,16 @@ def create_app_interfaces(app):
         return
 
     try:
-        fh = open(path, 'w')
+        with open(ts_file_path, 'w') as fh:
+            fh.write(content)
     except FileNotFoundError:
-        os.mkdir(os.path.dirname(path))
-        fh = open(path, 'w')
-    fh.write(content)
-    fh.close()
+        os.makedirs(os.path.dirname(ts_file_path), exist_ok=True)
+        with open(ts_file_path, 'w') as fh:
+            fh.write(content)
+
+    if py_mtime:
+        os.utime(ts_file_path, (py_mtime, py_mtime))
+
 
 def get_serializers(module):
     apps = {}

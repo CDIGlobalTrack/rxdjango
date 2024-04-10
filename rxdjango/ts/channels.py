@@ -15,12 +15,23 @@ def create_app_channels(app):
     if not consumer_urlpatterns:
         return
 
+    channel_module_name = f'{app}.channels'
+    channel_path = channel_module_name.replace('.', '/') + '.py'
+
+    ts_file_path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.channels.ts')
+    py_mtime = None
+
+    if os.path.exists(channel_path):
+        py_mtime = os.path.getmtime(channel_path)
+
+
     existing = []
 
-    path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.channels.ts')
-
-    if os.path.exists(path):
-        existing = open(path).read().split('\n')
+    if os.path.exists(ts_file_path):
+        if py_mtime == os.path.getmtime(ts_file_path):
+            return
+        with open(ts_file_path, 'r') as file:
+            existing = file.read().split('\n')
 
     code = header(
         app,
@@ -54,15 +65,20 @@ def create_app_channels(app):
     content = '\n'.join(code)
 
     if content.split('\n')[2:] == existing[2:]:
+        if py_mtime:
+            os.utime(ts_file_path, (py_mtime, py_mtime))
         return
 
     try:
-        fh = open(path, 'w')
+        with open(ts_file_path, 'w') as fh:
+            fh.write(content)
     except FileNotFoundError:
-        os.mkdir(os.path.dirname(path))
-        fh = open(path, 'w')
-    fh.write(content)
-    fh.close()
+        os.makedirs(os.path.dirname(ts_file_path), exist_ok=True)
+        with open(ts_file_path, 'w') as fh:
+            fh.write(content)
+
+    if py_mtime:
+        os.utime(ts_file_path, (py_mtime, py_mtime))
 
 
 def get_root_routing():
