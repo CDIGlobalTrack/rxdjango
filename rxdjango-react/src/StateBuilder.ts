@@ -22,7 +22,7 @@ export default class StateBuilder<T> {
 
   private receiveInstance(instance: TempInstance) {
     const _instance = this.buildInstance(instance);
-    
+
     if (this.state === undefined) {
       if (instance._instance_type !== this.anchor) {
         throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
@@ -43,6 +43,7 @@ export default class StateBuilder<T> {
     const _instance = instance as unknown as { [key: string]: any };
     const key = `${_instance._instance_type}:${_instance.id}`;
     const newInstance = (this.index[key] || _instance) as TempInstance;
+    newInstance._loaded = true;
     const model = this.model[_instance._instance_type];
     this.index[key] = newInstance as InstanceType;
     for (const [property, value] of Object.entries(_instance)) {
@@ -53,17 +54,19 @@ export default class StateBuilder<T> {
           const ids = _instance[property] as number[];
           newInstance[property] = ids.map((id) => {
             const pkey = `${instanceType}:${id}`;
-            return this.index[pkey] || this.getUnloadedInstance(id, instanceType);
+            this.index[pkey] ||= this.getUnloadedInstance(id, instanceType);
+            return this.index[pkey]
           });
         } else {
           const pkey = `${instanceType}:${value}`;
-          newInstance[property] = this.index[pkey] || this.getUnloadedInstance(value, instanceType);
-        } 
+          this.index[pkey] ||= this.getUnloadedInstance(value, instanceType);
+          newInstance[property] = this.index[pkey];
+        }
       } else {
         newInstance[property] = value;
       }
     }
-    
+
     return newInstance as unknown as InstanceType;
   }
 

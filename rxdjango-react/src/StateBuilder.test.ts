@@ -85,5 +85,9 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.tasks?.[0].id).toEqual(taskInstance.id);
     expect(stateBuilder.state!.tasks?.[0].name).toEqual(taskInstance.name);
     expect(stateBuilder.state!.tasks?.[0]._loaded).toEqual(true);
+    expect(stateBuilder.state!.tasks?.[1].id).toEqual(2);
+    expect(stateBuilder.state!.tasks?.[1].name).toEqual(undefined);
+    expect(stateBuilder.state!.tasks?.[1]._loaded).toEqual(false);
   });
+
 });

@@ -21,7 +21,7 @@ export interface TempInstance extends InstanceType {
   [index: string]: string | number | object | Date | null | undefined;
 }
 
-export interface UnloadedInstance extends IntanceType {
+export interface UnloadedInstance extends InstanceType {
   id: number;
   _loaded: false;
 }
