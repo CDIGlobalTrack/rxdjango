@@ -31,8 +31,6 @@ export default class StateBuilder<T> {
       this.state = _instance as T;
       return;
     };
-
-    //Object.assign(_instance, instance);
   }
 
   private getUnloadedInstance(id: number, instanceType: string) {
