@@ -29,12 +29,7 @@ export default class StateBuilder<T> {
       }
 
       this.state = _instance as T;
-      return;
     };
-  }
-
-  private getUnloadedInstance(id: number, instanceType: string) {
-    return { id, _instance_type: instanceType, _operation: 'create', _tstamp: 0, _loaded: false } as UnloadedInstance;
   }
 
   private buildInstance(instance: TempInstance): InstanceType {
@@ -47,18 +42,13 @@ export default class StateBuilder<T> {
     for (const [property, value] of Object.entries(_instance)) {
       const _property = property as keyof InstanceType;
       if (model[property]) {
+        // This is a relation, replace ids with instances
         const instanceType = model[property];
         if (Array.isArray(_instance[property])) {
           const ids = _instance[property] as number[];
-          newInstance[property] = ids.map((id) => {
-            const pkey = `${instanceType}:${id}`;
-            this.index[pkey] ||= this.getUnloadedInstance(id, instanceType);
-            return this.index[pkey]
-          });
+          newInstance[property] = ids.map(id => this.getOrCreate(instanceType, id));
         } else {
-          const pkey = `${instanceType}:${value}`;
-          this.index[pkey] ||= this.getUnloadedInstance(value, instanceType);
-          newInstance[property] = this.index[pkey];
+          newInstance[property] = this.getOrCreate(instanceType, value);
         }
       } else {
         newInstance[property] = value;
@@ -66,6 +56,14 @@ export default class StateBuilder<T> {
     }
 
     return newInstance as unknown as InstanceType;
+  }
+
+  private getOrCreate(instanceType: string, id: number) {
+    const pkey = `${instanceType}:${id}`;
+    this.index[pkey] ||= {
+      id, _instance_type: instanceType, _operation: 'create', _tstamp: 0, _loaded: false
+    } as UnloadedInstance;
+    return this.index[pkey];
   }
 
 }
