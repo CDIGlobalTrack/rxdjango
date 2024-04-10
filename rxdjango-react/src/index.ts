@@ -2,4 +2,4 @@ export { default as StateChannel } from './StateChannel';
 
 export type { InstanceType } from './StateChannel.d';
 
-export { useStateChannel } from './hook';
+export { useChannelState } from './hook';
