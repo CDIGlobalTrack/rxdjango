@@ -1,19 +1,19 @@
-import { InstanceType } from './StateChannel.d';
+import { InstanceType, TempInstance } from './StateChannel.d';
 
-export interface TaskType extends InstanceType {
+export interface TaskType extends TempInstance {
   name?: string;
 }
 
-export interface TaskPayload extends InstanceType {
+export interface TaskPayload extends TempInstance {
   name?: string;
 }
 
-export interface ProjectType extends InstanceType {
+export interface ProjectType extends TempInstance {
   name?: string;
   tasks?: TaskType[] | undefined;
 }
 
-export interface ProjectPayload extends InstanceType {
+export interface ProjectPayload extends TempInstance {
   name?: string;
   tasks?: number[] | undefined;
 }

@@ -1,5 +1,5 @@
 import StateBuilder from './StateBuilder';
-import { InstanceType } from './StateChannel.d';
+import { TempInstance } from './StateChannel.d';
 import {
   ProjectType,
   ANCHOR,
@@ -49,7 +49,7 @@ describe('StateBuilder', () => {
       },
     ];
 
-    stateBuilder.update(instances as InstanceType[]);
+    stateBuilder.update(instances as TempInstance[]);
     expect(stateBuilder.state!.id).toBe(1);
     expect(stateBuilder.state!.name).toBe('Project #1');
     expect(stateBuilder.state!.tasks).toEqual([]);
@@ -59,7 +59,7 @@ describe('StateBuilder', () => {
     const instance = { name: 'Project #1', tasks: [1, 2, 3], ...header('ProjectSerializer', 1) };
     const instances = [instance];
 
-    stateBuilder.update(instances as InstanceType[]);
+    stateBuilder.update(instances as TempInstance[]);
 
     expect(stateBuilder.state?.tasks?.[0]._loaded).toEqual(false);
     expect(stateBuilder.state?.tasks?.[0].id).toEqual(1);

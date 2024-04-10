@@ -17,6 +17,10 @@ export interface InstanceType {
   _loaded?: boolean;
 }
 
+export interface TempInstance extends InstanceType {
+  [index: string]: string | number | object | Date | null | undefined;
+}
+
 export interface UnloadedInstance extends IntanceType {
   id: number;
   _loaded: false;
