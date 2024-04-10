@@ -1,27 +1,24 @@
 from django.apps import apps
-from django.db import ProgrammingError
-from django.core.management.base import BaseCommand
 from django.conf import settings
+from daphne.management.commands.runserver import Command as RunserverCommand
 from rxdjango.ts.interfaces import create_app_interfaces
 from rxdjango.ts.channels import create_app_channels
 
 
-class Command(BaseCommand):
-    help = 'Generate typescript interfaces and classes'
+class Command(RunserverCommand):
 
-    def add_arguments(self, parser):
-        parser.add_argument('app', nargs='*', type=str)
+    def inner_run(self, *args, **kwargs):
+        self._make_sdk()
+        super().inner_run(*args, **kwargs)
 
-    def handle(self, *args, **options):
+    def _make_sdk(self):
+        print("Generating RxDjango SDK")
         self._check()
 
-        all_apps = options['app']
+        models = apps.get_models()
+        installed_apps = list(set([ x.__module__.split('.')[0] for x in models]))
 
-        if not all_apps:
-            models = apps.get_models()
-            all_apps = list(set([ x.__module__.split('.')[0] for x in models]))
-
-        for app in all_apps:
+        for app in installed_apps:
             create_app_interfaces(app)
             create_app_channels(app)
 

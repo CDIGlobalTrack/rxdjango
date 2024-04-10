@@ -4,3 +4,4 @@ channels>=4
 channels-redis>=4.1
 djangorestframework>=3
 bson>=0.5
+daphne>=4.1.0
