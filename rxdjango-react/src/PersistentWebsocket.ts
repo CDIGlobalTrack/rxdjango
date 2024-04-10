@@ -1,4 +1,4 @@
-import { AuthStatus, InstanceType } from './StateChannel.d';
+import { AuthStatus, TempInstance } from './StateChannel.d';
 
 export default class PersistentWebSocket {
 
@@ -17,7 +17,7 @@ export default class PersistentWebSocket {
   public onopen: () => void = () => {};
   public onclose: (event: CloseEvent) => void = () => {};
   public onauth: (authStatus: AuthStatus) => void = () => {};
-  public oninstances: (instances: InstanceType[]) => void = () => {};
+  public oninstances: (instances: TempInstance[]) => void = () => {};
 
   constructor(
     url: string,
@@ -63,7 +63,7 @@ export default class PersistentWebSocket {
         return;
       }
 
-      this.oninstances(message as InstanceType[]);
+      this.oninstances(message as TempInstance[]);
     };
 
     this.ws.onclose = (event) => {

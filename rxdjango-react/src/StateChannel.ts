@@ -1,6 +1,6 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { InstanceType, Listener, Model } from './StateChannel.d';
+import { InstanceType, TempInstance, Listener, Model } from './StateChannel.d';
 
 abstract class StateChannel<T> {
   private ws: PersistentWebsocket | undefined;
@@ -34,7 +34,7 @@ abstract class StateChannel<T> {
     this.ws = ws;
   }
 
-  private receiveInstances(instances: InstanceType[]) {
+  private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
     this.notify();
   }
