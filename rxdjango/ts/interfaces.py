@@ -18,7 +18,12 @@ def create_app_interfaces(app):
     except ModuleNotFoundError:
         return
 
+    existing = []
+
     path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.interfaces.d.ts')
+
+    if os.path.exists(path):
+        existing = open(path).read().split('\n')
 
     serializers = get_serializers(module)
 
@@ -60,6 +65,9 @@ def create_app_interfaces(app):
         return
 
     content = '\n'.join(code)
+
+    if content.split('\n')[2:] == existing[2:]:
+        return
 
     try:
         fh = open(path, 'w')

@@ -15,7 +15,12 @@ def create_app_channels(app):
     if not consumer_urlpatterns:
         return
 
+    existing = []
+
     path = os.path.join(settings.RX_FRONTEND_DIR, f'{app}/{app}.channels.ts')
+
+    if os.path.exists(path):
+        existing = open(path).read().split('\n')
 
     code = header(
         app,
@@ -47,6 +52,9 @@ def create_app_channels(app):
     code.extend(body)
 
     content = '\n'.join(code)
+
+    if content.split('\n')[2:] == existing[2:]:
+        return
 
     try:
         fh = open(path, 'w')
