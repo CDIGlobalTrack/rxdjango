@@ -1,12 +1,11 @@
 import { InstanceType, Model, TempInstance, UnloadedInstance } from './StateChannel.d';
 
-
-
 export default class StateBuilder<T> {
   public state: T | undefined;
 
   private model: Model;
   private anchor: string;
+  private anchorId: number | undefined;
   private index: { [key: string]: InstanceType } = {};
 
   constructor(model: Model, anchor: string) {
@@ -18,9 +17,15 @@ export default class StateBuilder<T> {
     for (const instance of instances) {
       this.receiveInstance(instance);
     }
+
+    this.state = { ...this.state } as T;
   }
 
   private receiveInstance(instance: TempInstance) {
+    if (instance._instance_type === this.anchor && instance.id === this.anchorId) {
+      debugger;
+    }
+    
     const _instance = this.buildInstance(instance);
 
     if (this.state === undefined) {
@@ -28,8 +33,14 @@ export default class StateBuilder<T> {
         throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
       }
 
+      this.anchorId = instance.id;
       this.state = _instance as T;
+      return;
     };
+
+    if (instance._instance_type === this.anchor && instance.id === this.anchorId) {
+      this.state = _instance as T;
+    }
   }
 
   private buildInstance(instance: TempInstance): InstanceType {
@@ -40,7 +51,6 @@ export default class StateBuilder<T> {
     const model = this.model[_instance._instance_type];
     this.index[key] = newInstance as InstanceType;
     for (const [property, value] of Object.entries(_instance)) {
-      const _property = property as keyof InstanceType;
       if (model[property]) {
         // This is a relation, replace ids with instances
         const instanceType = model[property];
