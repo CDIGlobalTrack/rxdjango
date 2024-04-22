@@ -22,10 +22,6 @@ export default class StateBuilder<T> {
   }
 
   private receiveInstance(instance: TempInstance) {
-    if (instance._instance_type === this.anchor && instance.id === this.anchorId) {
-      debugger;
-    }
-    
     const _instance = this.buildInstance(instance);
 
     if (this.state === undefined) {

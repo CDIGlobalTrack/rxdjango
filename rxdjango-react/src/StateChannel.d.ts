@@ -1,4 +1,5 @@
 export type Listener<T> = (state: T) => void;
+export type NoConnectionListener = (no_connection_since: Date | undefined) => void;
 
 export type Model = {
   [key: string]: ModelEntry;

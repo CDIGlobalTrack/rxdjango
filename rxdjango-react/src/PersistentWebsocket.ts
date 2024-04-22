@@ -43,7 +43,6 @@ export default class PersistentWebSocket {
     this.ws = new WebSocket(this.url, this.protocols);
 
     this.ws.onopen = () => {
-      console.log("WebSocket connected!");
       this.ws!.send(JSON.stringify({ token: this.token }));
       this.reconnectInterval = this.initialReconnectInterval;
       this.onopen();
