@@ -37,7 +37,7 @@ def create_app_interfaces(app):
 
     initial_length = len(code)
 
-    code.append(f"import {{ InstanceType }} from 'lib/django-react';\n")
+    code.append(f"import {{ InstanceType }} from '@rxdjango/react';\n")
 
     for external_app, dependencies in serializers.items():
         dependencies = [ dep for dep in dependencies if ts_exported(dep) ]
