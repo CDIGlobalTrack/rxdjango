@@ -1,4 +1,5 @@
 export type Listener<T> = (state: T) => void;
+export type NoConnectionListener = (no_connection_since: Date | undefined) => void;
 
 export type Model = {
   [key: string]: ModelEntry;
@@ -14,6 +15,16 @@ export interface InstanceType {
   _operation: string;
   _tstamp: number;
   _deleted?: boolean;
+  _loaded?: boolean;
+}
+
+export interface TempInstance extends InstanceType {
+  [index: string]: string | number | object | Date | null | undefined;
+}
+
+export interface UnloadedInstance extends InstanceType {
+  id: number;
+  _loaded: false;
 }
 
 export interface AuthStatus {

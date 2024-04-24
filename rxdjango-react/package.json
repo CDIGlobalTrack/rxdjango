@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "jest src",
+    "test:debug": "node --inspect node_modules/.bin/jest --runInBand src",
     "dev": "tsc -p tsconfig.json --watch",
     "build": "tsc -p tsconfig.json"
   },
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@types/react": "^18.2.24",
     "@types/react-dom": "^18.2.8",
+    "ts-jest": "^29.1.2",
     "ts-node": "^10.9.1",
     "tsup": "^7.2.0",
     "typescript": "^5.2.2"
@@ -33,5 +35,9 @@
   "peerDependencies": {
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "@types/jest": "^29.5.12",
+    "jest": "^29.7.0"
   }
 }

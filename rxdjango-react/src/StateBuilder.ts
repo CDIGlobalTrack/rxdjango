@@ -1,146 +1,75 @@
-import InstanceHandler from './InstanceHandler';
-import { HandlerIndex } from './InstanceHandler.d';
-import { InstanceType, Model, ModelEntry } from './StateChannel.d';
+import { InstanceType, Model, TempInstance, UnloadedInstance } from './StateChannel.d';
 
 export default class StateBuilder<T> {
   public state: T | undefined;
 
   private model: Model;
   private anchor: string;
-  private handlers: HandlerIndex = {};
-  private anchorHandler: InstanceHandler | undefined = undefined;
+  private anchorId: number | undefined;
+  private index: { [key: string]: InstanceType } = {};
 
   constructor(model: Model, anchor: string) {
     this.model = model;
     this.anchor = anchor;
   }
 
-  public update(instances: InstanceType[]) {
+  public update(instances: TempInstance[]) {
     for (const instance of instances) {
       this.receiveInstance(instance);
     }
+
+    this.state = { ...this.state } as T;
   }
 
-  private makeInstanceHandler(key: string, property?: string) {
-    const handler = new InstanceHandler(property);
-    this.handlers[key] = handler;
-    return handler;
-  }
+  private receiveInstance(instance: TempInstance) {
+    const _instance = this.buildInstance(instance);
 
-  private receiveInstance(instance: InstanceType) {
-    const key = `${instance._instance_type}:${instance.id}`;
-
-    if (instance._instance_type === this.anchor) {
-      // This is an anchor
-      this.receiveAnchorInstance(key, instance);
-      return;
-    }
-
-    if (this.handlers[key]) {
-      // This is an nested instance
-      this.receiveNestedInstance(key, instance);
-      return;
-    }
-  }
-
-  private receiveAnchorInstance(key: string, instance: InstanceType) {
-    if (this.handlers[key]) {
-      // anchor already loadded preveously
-      this.handlers[key].setData(instance);
-      this.rebuildState();
-    } else {
-      this.anchorHandler = this.makeInstanceHandler(key);
-      const model = this.model[instance._instance_type];
-      this.makeNestedIntanceHandlers(model, instance);
-
-      this.anchorHandler?.subscribe(() => this.rebuildState());
-      this.anchorHandler?.setData(instance);
-    }
-  }
-
-  private receiveNestedInstance(key: string, instance: InstanceType) {
-    const handler = this.handlers[key];
-    handler.setData(instance);
-
-    const model = this.model[instance._instance_type];
-    this.makeNestedIntanceHandlers(model, instance);
-  }
-
-  private makeNestedIntanceHandlers(model: ModelEntry, instance: InstanceType) {
-    const _instance = instance as unknown as { [key: string]: any };
-
-    for (const [property, instanceType] of Object.entries(model)) {
-
-      if (Array.isArray(_instance[property])) {
-        // this is a list
-        const ids = _instance[property];
-
-        for (const id of ids) {
-          const key = `${instanceType}:${id}`;
-
-          if (!this.handlers[key]) {
-            const handler = this.makeInstanceHandler(key, property);
-            this.handlers[key] = handler;
-          }
-
-          this.handlers[key].subscribe(() => this.rebuildState());
-        }
-      } else {
-        // this is a foreing key
-        const key = `${instanceType}:${_instance[property]}`;
-
-        if (!this.handlers[key]) {
-          const handler = this.makeInstanceHandler(key, property);
-          this.handlers[key] = handler;
-        }
-
-        this.handlers[key].subscribe(() => this.rebuildState());
+    if (this.state === undefined) {
+      if (instance._instance_type !== this.anchor) {
+        throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
       }
+
+      this.anchorId = instance.id;
+      this.state = _instance as T;
+      return;
+    };
+
+    if (instance._instance_type === this.anchor && instance.id === this.anchorId) {
+      this.state = _instance as T;
     }
   }
 
-  private rebuildState() {
-    const data = this.anchorHandler!.data as InstanceType;
-    this.state = this.getCascadeInstance(this.model[this.anchor], data) as T;
-  }
-
-  private getCascadeInstance(model: ModelEntry, instance: InstanceType) {
+  private buildInstance(instance: TempInstance): InstanceType {
     const _instance = instance as unknown as { [key: string]: any };
-    const state = { ..._instance };
-
-    for (const [property, instanceType] of Object.entries(model)) {
-
-      if (Array.isArray(_instance[property])) {
-        // this is a list
-        state[property] = _instance[property].map((id: number) => {
-          const key = `${instanceType}:${id}`;
-          const data = this.handlers[key]?.data;
-
-          if (!data) {
-            // it means that instance still not loadded
-            return undefined;
-          }
-
-          const cascadeModel = this.model[instanceType];
-          return this.getCascadeInstance(cascadeModel, data);
-        });
-      } else {
-        // this is a foreing key
-        const key = `${instanceType}:${state[property]}`;
-        const data = this.handlers[key]?.data;
-
-        if (!data) {
-          // it means that instance still not loadded
-          state[property] = undefined;
-          continue;
+    const key = `${_instance._instance_type}:${_instance.id}`;
+    const newInstance = (this.index[key] || _instance) as TempInstance;
+    newInstance._loaded = true;
+    const model = this.model[_instance._instance_type];
+    this.index[key] = newInstance as InstanceType;
+    for (const [property, value] of Object.entries(_instance)) {
+      if (model[property]) {
+        // This is a relation, replace ids with instances
+        const instanceType = model[property];
+        if (Array.isArray(_instance[property])) {
+          const ids = _instance[property] as number[];
+          newInstance[property] = ids.map(id => this.getOrCreate(instanceType, id));
+        } else {
+          newInstance[property] = this.getOrCreate(instanceType, value);
         }
-
-        const cascadeModel = this.model[instanceType];
-        state[property] = this.getCascadeInstance(cascadeModel, data) as T;
+      } else {
+        newInstance[property] = value;
       }
     }
 
-    return state;
+    return newInstance as unknown as InstanceType;
+  }
+
+  private getOrCreate(instanceType: string, id: number) {
+    const pkey = `${instanceType}:${id}`;
+    this.index[pkey] ||= {
+      id, _instance_type: instanceType, _operation: 'create', _tstamp: 0, _loaded: false
+    } as UnloadedInstance;
+    return this.index[pkey];
   }
 
 }

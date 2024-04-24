@@ -1,11 +1,12 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { InstanceType, Listener, Model } from './StateChannel.d';
+import { NoConnectionListener, TempInstance, Listener, Model } from './StateChannel.d';
 
 abstract class StateChannel<T> {
   private ws: PersistentWebsocket | undefined;
   private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
+  private noConnectionListeners: NoConnectionListener[] = [];
   private token: string;
 
   protected args: { [key: string]: number | string } = {};
@@ -24,9 +25,11 @@ abstract class StateChannel<T> {
       return;
 
     this.builder = new StateBuilder<T>(this.model, this.anchor);
-
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
+    ws.onclose = this.onclose.bind(this);
+    ws.onopen = this.onopen.bind(this);
+    
     ws.oninstances = (instances) => {
       this.receiveInstances(instances);
     };
@@ -34,7 +37,7 @@ abstract class StateChannel<T> {
     this.ws = ws;
   }
 
-  private receiveInstances(instances: InstanceType[]) {
+  private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
     this.notify();
   }
@@ -45,11 +48,15 @@ abstract class StateChannel<T> {
     }
   }
 
-  public subscribe(listener: Listener<T>): () => void {
+  public subscribe(listener: Listener<T>, noConnectionListener?: NoConnectionListener): () => void {
     if (!this.ws)
       this.init();
 
     this.listeners.push(listener);
+
+    if (noConnectionListener) {
+      this.noConnectionListeners.push(noConnectionListener);
+    }
 
     if (this.listeners.length === 1)
       this.ws!.connect();
@@ -86,6 +93,18 @@ abstract class StateChannel<T> {
     return `${this.baseURL}${constructedEndpoint}`;
   }
 
+  private onopen() {
+    for (const listener of this.noConnectionListeners) {
+      listener(undefined);
+    }
+  }
+  
+  private onclose() {
+    const now = new Date();
+    for (const listener of this.noConnectionListeners) {
+      listener(now);
+    }
+  }
 }
 
 export default StateChannel;
