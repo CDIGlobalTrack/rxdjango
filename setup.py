@@ -3,13 +3,7 @@ from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
-VERSION = '0.0.8'
-
-# parse requirements
-with open(path.join(cur_dir, "requirements.txt"), "r") as f:
-    requirements = f.read().split('\n')
-
-requirements = [ x for x in requirements if x and not x.startswith('#') ]
+VERSION = '0.0.9'
 
 setup(
     name="rxdjango",
@@ -18,7 +12,15 @@ setup(
     version=VERSION,
     packages=find_packages(),
     license="LICENSE.md",
-    install_requires=requirements,
+    install_requires=[
+        'Django>=4.2',
+        'motor>=3.3',
+        'channels>=4',
+        'channels-redis>=4.1',
+        'djangorestframework>=3',
+        'bson>=0.5',
+        'daphne>=4.1.0'
+    ],
     url="https://github.com/CDIGlobalTrack/rxdjango",
     include_package_data=True,
     python_requires=">=3.10"
