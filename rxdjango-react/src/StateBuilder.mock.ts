@@ -1,4 +1,4 @@
-import { InstanceType, TempInstance } from './StateChannel.d';
+import { InstanceType, TempInstance } from './StateChannel.interfaces';
 
 export interface TaskType extends TempInstance {
   taskName: string;

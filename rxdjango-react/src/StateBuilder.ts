@@ -1,4 +1,4 @@
-import { InstanceType, Model, TempInstance, UnloadedInstance } from './StateChannel.d';
+import { InstanceType, Model, TempInstance, UnloadedInstance } from './StateChannel.interfaces';
 
 export default class StateBuilder<T> {
   public state: T | undefined;

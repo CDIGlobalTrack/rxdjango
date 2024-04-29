@@ -19,7 +19,7 @@ export interface InstanceType {
 }
 
 export interface TempInstance extends InstanceType {
-  [index: string]: string | number | object | Date | null | undefined;
+  [index: string]: string | number | object | Date | null | undefined | boolean;
 }
 
 export interface UnloadedInstance extends InstanceType {

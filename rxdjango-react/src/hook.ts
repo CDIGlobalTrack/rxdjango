@@ -12,7 +12,7 @@ export const useChannelState = <T>(channel: StateChannel<T>) => {
     return () => {
       unsubscribe();
     }
-  }, [])
+  }, []);
 
   return { state, no_connection_since: noConnectionSince };
 }
