@@ -1,6 +1,6 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { NoConnectionListener, TempInstance, Listener, Model } from './StateChannel.d';
+import { NoConnectionListener, TempInstance, Listener, Model } from './StateChannel.interfaces';
 
 abstract class StateChannel<T> {
   private ws: PersistentWebsocket | undefined;
@@ -106,5 +106,6 @@ abstract class StateChannel<T> {
     }
   }
 }
+
 
 export default StateChannel;
