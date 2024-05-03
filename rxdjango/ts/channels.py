@@ -178,6 +178,7 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
         f"export class {name} extends StateChannel<{state_type}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';\n",
+        f"  args: {{ [key: string]: number | string }} = {{}};\n",
     ]
 
     # Add private properties based on parameters
