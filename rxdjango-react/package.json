@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "test": "jest src",
+    "test:watch": "jest src --watch",
     "test:debug": "node --inspect node_modules/.bin/jest --runInBand src",
     "dev": "tsc -p tsconfig.json --watch",
     "build": "tsc -p tsconfig.json"
