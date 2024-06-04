@@ -91,7 +91,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.tasks?.[1]._loaded).toEqual(false);
   });
 
-  it('preserves the object reference when it is loaded', () => {
+  it('changes the object reference when it is loaded', () => {
     const projectInstance: ProjectPayload = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
@@ -106,8 +106,13 @@ describe('StateBuilder', () => {
     const task = stateBuilder.state!.tasks![0];
     expect(task._loaded).toEqual(false);
     stateBuilder.update([taskInstance]);
-    expect(stateBuilder.state!.tasks![0]).toBe(task);
-    expect(task._loaded).toEqual(true);
+    const newTask = stateBuilder.state!.tasks![0];
+    expect(newTask).not.toBe(task);
+    expect(newTask._loaded).toEqual(true);
+
+    taskInstance.taskName = 'changed';
+    stateBuilder.update([taskInstance]);
+    expect(stateBuilder.state!.tasks![0]).not.toBe(newTask);
   });
 
   it('initializes foreign key with unloaded object', () => {
@@ -121,7 +126,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state?.customer.id).toEqual(1);
   });
 
-  it('loads foreign key when it arrives, preserving reference', () => {
+  it('loads foreign key when it arrives, changing reference', () => {
     const projectInstance: ProjectPayload = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
@@ -136,7 +141,7 @@ describe('StateBuilder', () => {
     stateBuilder.update([customerInstance]);
     expect(stateBuilder.state?.customer._loaded).toEqual(true);
     expect(stateBuilder.state?.customer.id).toEqual(5);
-    expect(stateBuilder.state?.customer).toBe(customer);
+    expect(stateBuilder.state?.customer).not.toBe(customer);
   });
 
   it('shares the reference of instance when it appears twice, with tasks arriving later', () => {
