@@ -27,7 +27,7 @@ export default class StateBuilder<T> {
     }
 
     const key = `${this.anchor}:${this.anchorId}`;
-    this.state = this.index[key] as T;
+    this.state = { ...this.index[key] } as T;
   }
 
   private receiveInstance(instance: TempInstance) {
