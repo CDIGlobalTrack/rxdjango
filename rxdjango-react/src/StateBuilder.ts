@@ -1,4 +1,11 @@
-import { InstanceType, Model, TempInstance, UnloadedInstance } from './StateChannel.interfaces';
+import {
+  InstanceType,
+  Model,
+  TempInstance,
+  UnloadedInstance,
+  InstanceReference,
+} from './StateChannel.interfaces';
+
 
 export default class StateBuilder<T> {
   public state: T | undefined;
@@ -7,6 +14,7 @@ export default class StateBuilder<T> {
   private anchor: string;
   private anchorId: number | undefined;
   private index: { [key: string]: InstanceType } = {};
+  private refs: { [key:string]: InstanceReference[] } = {};
 
   constructor(model: Model, anchor: string) {
     this.model = model;
@@ -18,7 +26,8 @@ export default class StateBuilder<T> {
       this.receiveInstance(instance);
     }
 
-    this.state = { ...this.state } as T;
+    const key = `${this.anchor}:${this.anchorId}`;
+    this.state = this.index[key] as T;
   }
 
   private receiveInstance(instance: TempInstance) {
@@ -31,6 +40,8 @@ export default class StateBuilder<T> {
 
       this.anchorId = instance.id;
       this.state = _instance as T;
+      const key = `${_instance._instance_type}:${_instance.id}`;
+      this.index[key] = this.state as InstanceType;
       return;
     };
 
@@ -42,33 +53,58 @@ export default class StateBuilder<T> {
   private buildInstance(instance: TempInstance): InstanceType {
     const _instance = instance as unknown as { [key: string]: any };
     const key = `${_instance._instance_type}:${_instance.id}`;
-    const newInstance = (this.index[key] || _instance) as TempInstance;
-    newInstance._loaded = true;
-    const model = this.model[_instance._instance_type];
+    let newInstance = (this.index[key] || _instance) as TempInstance;
+    newInstance = {
+      ...newInstance,
+      _loaded: true,
+    };
     this.index[key] = newInstance as InstanceType;
+    const model = this.model[_instance._instance_type];
+
     for (const [property, value] of Object.entries(_instance)) {
       if (model[property]) {
         // This is a relation, replace ids with instances
         const instanceType = model[property];
         if (Array.isArray(_instance[property])) {
           const ids = _instance[property] as number[];
-          newInstance[property] = ids.map(id => this.getOrCreate(instanceType, id));
+          newInstance[property] = ids.map((id, index) => this.getOrCreate(instanceType, id, `${property}:${index}`, key));
         } else {
-          newInstance[property] = this.getOrCreate(instanceType, value);
+          newInstance[property] = this.getOrCreate(instanceType, value, property, key);
         }
       } else {
         newInstance[property] = value;
       }
     }
 
+    if (!this.refs[key]) {
+      this.refs[key] = [];
+    } else {
+      this.changeRef(key, newInstance);
+    }
+
     return newInstance as unknown as InstanceType;
   }
 
-  private getOrCreate(instanceType: string, id: number) {
+  private changeRef(key:string, newInstance: TempInstance) {
+    for (const ref of this.refs[key]) {
+      const instance = this.index[ref.instanceKey] as any;
+      const property = ref.referenceKey;
+      const [ prop, index ] = property.split(':');
+      if (index) {
+        instance[prop][parseInt(index)] = newInstance;
+      } else {
+        instance[property] = newInstance;
+      }
+    }
+  }
+
+  private getOrCreate(instanceType: string, id: number, referenceKey: string, instanceKey: string) {
     const pkey = `${instanceType}:${id}`;
     this.index[pkey] ||= {
       id, _instance_type: instanceType, _operation: 'create', _tstamp: 0, _loaded: false
     } as UnloadedInstance;
+    this.refs[pkey] ||= [];
+    this.refs[pkey].push({ referenceKey, instanceKey });
     return this.index[pkey];
   }
 

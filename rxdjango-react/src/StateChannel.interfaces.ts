@@ -22,6 +22,11 @@ export interface TempInstance extends InstanceType {
   [index: string]: string | number | object | Date | null | undefined | boolean;
 }
 
+export interface InstanceReference {
+  referenceKey: string;
+  instanceKey: string;
+}
+
 export interface UnloadedInstance extends InstanceType {
   id: number;
   _loaded: false;
