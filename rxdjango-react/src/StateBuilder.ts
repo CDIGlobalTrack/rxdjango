@@ -67,7 +67,7 @@ export default class StateBuilder<T> {
         const instanceType = model[property];
         if (Array.isArray(_instance[property])) {
           const ids = _instance[property] as number[];
-          newInstance[property] = ids.map((id, index) => this.getOrCreate(instanceType, id, `${property}:${index}`, key));
+          newInstance[property] = ids.map((id, index) => this.getOrCreate(instanceType, id, property, key));
         } else {
           newInstance[property] = this.getOrCreate(instanceType, value, property, key);
         }
@@ -86,24 +86,17 @@ export default class StateBuilder<T> {
   }
 
   private changeRef(key:string, newInstance: TempInstance) {
-    const changes = {};
     for (const ref of this.refs[key]) {
       const instance = this.index[ref.instanceKey] as any;
       const property = ref.referenceKey;
-      const [ prop, index ] = property.split(':');
-      if (index) {
-        instance[prop][parseInt(index)] = newInstance;
-        const propKey = `${ref.instanceKey}|${prop}`;
-        changes{[ref.instanceKey, prop]} = 1;
-      } else {
+      if (!Array.isArray(instance[property])) {
         instance[property] = newInstance;
+      } else {
+        const related = instance[property] as unknown as InstanceType[];
+        instance[property] = related.map(
+          rel => this.index[`${rel._instance_type}:${rel.id}`]
+        );
       }
-    }
-
-    // Trigger reference change in array properties
-    for (const [instanceKey, prop] in changes) {
-      const instance = this.index[ref.instanceKey];
-      instance[prop] = [...instance[prop]];
     }
   }
 
