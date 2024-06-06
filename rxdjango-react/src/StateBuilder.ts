@@ -62,7 +62,7 @@ export default class StateBuilder<T> {
     const model = this.model[_instance._instance_type];
 
     for (const [property, value] of Object.entries(_instance)) {
-      if (model[property]) {
+      if (model && model[property]) {
         // This is a relation, replace ids with instances
         const instanceType = model[property];
         if (Array.isArray(_instance[property])) {
