@@ -86,15 +86,24 @@ export default class StateBuilder<T> {
   }
 
   private changeRef(key:string, newInstance: TempInstance) {
+    const changes = {};
     for (const ref of this.refs[key]) {
       const instance = this.index[ref.instanceKey] as any;
       const property = ref.referenceKey;
       const [ prop, index ] = property.split(':');
       if (index) {
         instance[prop][parseInt(index)] = newInstance;
+        const propKey = `${ref.instanceKey}|${prop}`;
+        changes{[ref.instanceKey, prop]} = 1;
       } else {
         instance[property] = newInstance;
       }
+    }
+
+    // Trigger reference change in array properties
+    for (const [instanceKey, prop] in changes) {
+      const instance = this.index[ref.instanceKey];
+      instance[prop] = [...instance[prop]];
     }
   }
 
