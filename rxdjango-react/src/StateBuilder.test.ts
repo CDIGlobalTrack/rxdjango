@@ -7,6 +7,7 @@ import {
   ProjectPayload,
   CustomerPayload,
   TaskPayload,
+  UserType,
 } from './StateBuilder.mock'
 
 const header = <T>(
@@ -146,6 +147,51 @@ describe('StateBuilder', () => {
     stateBuilder.update([task2]);
     expect(stateBuilder.state!.customer).not.toBe(customer);
     expect(stateBuilder.state!.customer!.tasks).not.toBe(tasks);
+  });
+
+  fit('changes the set reference if some child instance changes', () => {
+    const projectInstance: ProjectPayload = {
+      ...header('ProjectSerializer', 1),
+      projectName: 'Project #1',
+      customer: 2,
+      tasks: [1]
+    };
+
+    const customerInstance: CustomerPayload = {
+      ...header('CustomerSerializer', 2),
+      customerName: 'Customer #2',
+      tasks: [1],
+    };
+
+    const userInstance: UserType = {
+      ...header('UserSerializer', 1),
+      username: 'User #1',
+    };
+
+    const taskInstance: TaskPayload = {
+      ...header('TaskSerializer', 1),
+      taskName: 'Task #1',
+      user: 1,
+    };
+
+    stateBuilder.update([projectInstance]);
+    stateBuilder.update([customerInstance]);
+    stateBuilder.update([taskInstance]);
+
+    const project = stateBuilder.state;
+    const projectTasks = stateBuilder.state!.tasks;
+    const customer = stateBuilder.state!.customer;
+    const customerTasks = stateBuilder.state!.customer!.tasks;
+    const user = projectTasks[0].user;
+    
+    stateBuilder.update([userInstance]);
+
+
+    expect(project).not.toBe(stateBuilder.state);
+    expect(stateBuilder.state!.tasks).not.toBe(projectTasks);
+    expect(stateBuilder.state!.tasks[0].user).not.toBe(user);
+    expect(stateBuilder.state!.customer).not.toBe(customer);
+    expect(stateBuilder.state!.customer!.tasks).not.toBe(customerTasks);
   });
 
   it('initializes foreign key with unloaded object', () => {

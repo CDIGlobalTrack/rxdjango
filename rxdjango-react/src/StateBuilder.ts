@@ -21,13 +21,14 @@ export default class StateBuilder<T> {
     this.anchor = anchor;
   }
 
-  public update(instances: TempInstance[]) {
+  public async update(instances: TempInstance[]): Promise<T> {
     for (const instance of instances) {
       this.receiveInstance(instance);
     }
 
     const key = `${this.anchor}:${this.anchorId}`;
     this.state = { ...this.index[key] } as T;
+    return this.state;
   }
 
   private receiveInstance(instance: TempInstance) {

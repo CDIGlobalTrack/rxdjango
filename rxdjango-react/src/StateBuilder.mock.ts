@@ -4,6 +4,10 @@ export interface TaskType extends TempInstance {
   taskName: string;
 }
 
+export interface UserType extends TempInstance {
+  username: string;
+}
+
 export interface CustomerType extends TempInstance {
   customerName: string;
   tasks: TaskType[];
@@ -17,6 +21,7 @@ export interface ProjectType extends TempInstance {
 
 export interface TaskPayload extends TempInstance {
   taskName?: string;
+  user?: number;
 }
 
 export interface CustomerPayload extends TempInstance {
