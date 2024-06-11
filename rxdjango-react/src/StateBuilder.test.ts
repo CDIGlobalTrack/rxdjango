@@ -115,6 +115,39 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.tasks![0]).not.toBe(newTask);
   });
 
+  it('changes the middle node reference when child node is updated', () => {
+    const projectInstance: ProjectPayload = {
+      ...header('ProjectSerializer', 1),
+      projectName: 'Project #1',
+      customer: 2,
+    };
+
+    const customerInstance: CustomerPayload = {
+      ...header('CustomerSerializer', 2),
+      customerName: 'Customer #2',
+      tasks: [1, 2, 3],
+    };
+
+    const task1: TaskPayload = {
+      ...header('TaskSerializer', 1),
+      taskName: 'Task #1',
+    };
+
+    const task2: TaskPayload = {
+      ...header('TaskSerializer', 2),
+      taskName: 'Task #2',
+    };
+
+    stateBuilder.update([projectInstance]);
+    stateBuilder.update([customerInstance]);
+    stateBuilder.update([task1]);
+    const customer = stateBuilder.state!.customer;
+    const tasks = stateBuilder.state!.customer!.tasks;
+    stateBuilder.update([task2]);
+    expect(stateBuilder.state!.customer).not.toBe(customer);
+    expect(stateBuilder.state!.customer!.tasks).not.toBe(tasks);
+  });
+
   it('initializes foreign key with unloaded object', () => {
     const projectInstance: ProjectPayload = {
       ...header('ProjectSerializer', 1),
