@@ -85,7 +85,13 @@ export default class StateBuilder<T> {
     return newInstance as unknown as InstanceType;
   }
 
-  private changeRef(key:string, newInstance: TempInstance) {
+  private changeRef(key:string, newInstance: TempInstance, track: {[key: string]: true}|null=null) {
+    if (track === null) {
+      track = {key: true};
+    } else if (track[key]) {
+      // avoid infinite recursion
+      return;
+    }
     for (const ref of this.refs[key]) {
       const instance = this.index[ref.instanceKey] as any;
       const property = ref.referenceKey;
@@ -97,6 +103,7 @@ export default class StateBuilder<T> {
           rel => this.index[`${rel._instance_type}:${rel.id}`]
         );
       }
+      this.changeRef(ref.instanceKey, {...instance}, track);
     }
   }
 
