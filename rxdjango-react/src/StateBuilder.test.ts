@@ -149,7 +149,7 @@ describe('StateBuilder', () => {
     expect(stateBuilder.state!.customer!.tasks).not.toBe(tasks);
   });
 
-  fit('changes the set reference if some child instance changes', () => {
+  it('changes the set reference if some child instance changes', () => {
     const projectInstance: ProjectPayload = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
@@ -183,9 +183,8 @@ describe('StateBuilder', () => {
     const customer = stateBuilder.state!.customer;
     const customerTasks = stateBuilder.state!.customer!.tasks;
     const user = projectTasks[0].user;
-    
-    stateBuilder.update([userInstance]);
 
+    stateBuilder.update([userInstance]);
 
     expect(project).not.toBe(stateBuilder.state);
     expect(stateBuilder.state!.tasks).not.toBe(projectTasks);
