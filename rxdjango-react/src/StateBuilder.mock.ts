@@ -1,11 +1,12 @@
 import { InstanceType, TempInstance } from './StateChannel.interfaces';
 
-export interface TaskType extends TempInstance {
-  taskName: string;
-}
-
 export interface UserType extends TempInstance {
   username: string;
+}
+
+export interface TaskType extends TempInstance {
+  taskName: string;
+  user?: UserType;
 }
 
 export interface CustomerType extends TempInstance {
@@ -42,8 +43,11 @@ export const MODEL = {
     'customer': 'project.serializers.CustomerSerializer',
     'tasks': 'project.serializers.TaskSerializer',
   },
-  'project.serializers.TaskSerializer': {},
+  'project.serializers.TaskSerializer': {
+    'user': 'project.serializers.UserSerializer',
+  },
   'project.serializers.CustomerSerializer': {
     'tasks': 'project.serializers.TaskSerializer',
   },
+  'project.serializers.UserSerializer': {},
 }
