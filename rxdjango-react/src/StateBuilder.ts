@@ -104,7 +104,9 @@ export default class StateBuilder<T> {
           rel => this.index[`${rel._instance_type}:${rel.id}`]
         );
       }
-      this.changeRef(ref.instanceKey, {...instance}, track);
+      const key = `${instance._instance_type}:${instance.id}`;
+      this.index[key] = {...instance};
+      this.changeRef(ref.instanceKey, this.index[key], track);
     }
   }
 
