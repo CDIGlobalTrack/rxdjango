@@ -101,7 +101,8 @@ class StateModel:
         return self._mark(data, tstamp)
 
     def serialize_delete(self, instance, tstamp):
-        data = self._mark({'id': instance.pk}, tstamp)
+        pk = instance.pk or instance.id
+        data = self._mark({'id': pk}, tstamp)
         data['_deleted'] = True
         data['_operation'] = 'delete'
         return data
