@@ -99,6 +99,13 @@ class SignalHandler:
 
                 self._schedule(serialized, _layer)
 
+                if operation == 'create':
+                    # If instance is being created in this channel,
+                    # then all related objects need to be scheduled
+                    for attribute, child_layer in _layer.children.items():
+                        child = getattr(instance, 'qubedevice', None)
+                        _relay_instance(child_layer, child, tstamp, operation)
+
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
