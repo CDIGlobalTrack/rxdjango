@@ -64,7 +64,7 @@ class SignalHandler:
                 instance.__parent_updated = True
                 return
             try:
-                current = sender.objects.get(pk=instance.pk)
+                current = sender.objects.get(pk=instance.pk or instance.id)
             except sender.DoesNotExist:
                 return # Should not happen, but who knows
             acessor = layer.reverse_acessor
