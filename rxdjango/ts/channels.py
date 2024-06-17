@@ -9,7 +9,7 @@ from rxdjango.consumers import StateConsumer
 from . import header
 from . import interface_name
 
-def create_app_channels(app):
+def create_app_channels(app, apply_changes=True):
     consumer_urlpatterns = list_consumer_patterns(app)
 
     if not consumer_urlpatterns:
@@ -69,6 +69,9 @@ def create_app_channels(app):
             os.utime(ts_file_path, (py_mtime, py_mtime))
         return
 
+    if not apply_changes:
+        return True
+
     try:
         with open(ts_file_path, 'w') as fh:
             fh.write(content)
@@ -79,6 +82,8 @@ def create_app_channels(app):
 
     if py_mtime:
         os.utime(ts_file_path, (py_mtime, py_mtime))
+
+    return True
 
 
 def get_root_routing():
