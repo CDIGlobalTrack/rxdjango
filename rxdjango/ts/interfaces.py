@@ -11,7 +11,7 @@ from django.conf import settings
 from rest_framework import serializers, relations, fields
 from . import ts_exported, header, interface_name
 
-def create_app_interfaces(app):
+def create_app_interfaces(app, apply_changes=True):
     serializer_module_name = f'{app}.serializers'
     serializer_path = serializer_module_name.replace('.', '/') + '.py'
 
@@ -75,6 +75,9 @@ def create_app_interfaces(app):
     if content.split('\n')[2:] == existing[2:]:
         return
 
+    if not apply_changes:
+        return True
+
     try:
         with open(ts_file_path, 'w') as fh:
             fh.write(content)
@@ -85,6 +88,8 @@ def create_app_interfaces(app):
 
     if py_mtime:
         os.utime(ts_file_path, (py_mtime, py_mtime))
+
+    return True
 
 
 def get_serializers(module):
