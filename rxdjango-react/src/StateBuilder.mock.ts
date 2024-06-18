@@ -1,4 +1,4 @@
-import { InstanceType, TempInstance } from './StateChannel.interfaces';
+import { InstanceType, TempInstance } from './ContextChannel.interfaces';
 
 export interface UserType extends TempInstance {
   username: string;

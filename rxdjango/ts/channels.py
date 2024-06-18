@@ -1,13 +1,14 @@
 import os
 import re
 import json
+import typing
 from collections import defaultdict
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import URLPattern, URLResolver
 from django.conf import settings
 from rxdjango.consumers import StateConsumer
-from . import header
-from . import interface_name
+from rxdjango.actions import list_actions
+from . import header, interface_name, get_ts_type, snake_to_camel
 
 def create_app_channels(app, apply_changes=True):
     consumer_urlpatterns = list_consumer_patterns(app)
@@ -35,12 +36,12 @@ def create_app_channels(app, apply_changes=True):
 
     code = header(
         app,
-        f'Based on all StateChannel.as_asgi() calls in {settings.ASGI_APPLICATION}',
+        f'Based on all ContextChannel.as_asgi() calls in {settings.ASGI_APPLICATION}',
         f'This is expected to match {app}/channels.py',
     )
 
     code.extend([
-        f"import {{ StateChannel }} from '@rxdjango/react';\n",
+        f"import {{ ContextChannel }} from '@rxdjango/react';\n",
         f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
@@ -180,7 +181,7 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
 
     # Base of the class
     code = [
-        f"export class {name} extends StateChannel<{state_type}> {{\n",
+        f"export class {name} extends ContextChannel<{state_type}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';\n",
         f"  args: {{ [key: string]: number | string }} = {{}};\n",
@@ -204,6 +205,26 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
     code.append(f"  }}")
 
     code.append('')
+
+    # Actions
+    for action in list_actions(state_channel_class):
+        hints = typing.get_type_hints(action)
+
+        camel_action = snake_to_camel(action.__name__)
+
+        return_type = hints.pop('return', type(None))
+        return_type = get_ts_type(return_type)
+
+        params = [ f'{k}: {get_ts_type(v)}' for k, v in hints.items() ]
+        params = ', '.join(params)
+
+        call_params = ', '.join(list(hints.keys()))
+
+        code.append(f"  public async {camel_action}({params}): {return_type} {{")
+        code.append(f"    return await this.callAction('{action.__name__}', [{call_params}]);")
+        code.append(f"  }}")
+
+        code.append('')
 
     model = state_channel_class._state_model.frontend_model()
     model_code = json.dumps(model, indent=2)

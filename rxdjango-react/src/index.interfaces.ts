@@ -1,1 +1,1 @@
-export * from './StateChannel.interfaces';
+export * from './ContextChannel.interfaces';

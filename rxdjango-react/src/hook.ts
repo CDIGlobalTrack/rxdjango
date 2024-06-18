@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import StateChannel from './StateChannel';
+import ContextChannel from './ContextChannel';
 
-export const useChannelState = <T>(channel: StateChannel<T>) => {
+export const useChannelState = <T>(channel: ContextChannel<T>) => {
   const [state, setReactState] = useState<T | undefined>(undefined);
   const [noConnectionSince, setNoConnectionSince] = useState<Date | undefined>(undefined);
 

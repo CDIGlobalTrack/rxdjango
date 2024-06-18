@@ -1,0 +1,30 @@
+import asyncio
+import typing
+import inspect
+from collections import defaultdict
+from .exceptions import ForbiddenError, ActionNotAsync
+
+__actions = set()
+
+
+def action(method):
+    if not asyncio.iscoroutinefunction(method):
+        raise ActionNotAsync(f'@action decorator requires "{method.__name__}" to be async')
+    __actions.add(method)
+    return method
+
+
+def list_actions(channel):
+    for method in channel.__dict__.values():
+        if method in __actions:
+            yield method
+
+
+async def execute_action(channel, method_name, params):
+    method = getattr(channel, method_name, None)
+    if not method:
+        raise ForbiddenError
+    if not method in __actions:
+        raise ForbiddenError
+
+    return await method(*params)
