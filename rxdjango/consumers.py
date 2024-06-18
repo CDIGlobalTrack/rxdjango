@@ -17,7 +17,7 @@ class StateConsumer(AsyncWebsocketConsumer):
     """
     WebSocket consumer that manages user authentication, session management,
     and real-time data relay to clients. A subclass of StateConsumer will be
-    dinamically created by StateChannel.as_asgi().
+    dinamically created by ContextChannel.as_asgi().
     """
     def __init__(self, *args, **kwargs):
 

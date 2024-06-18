@@ -1,4 +1,4 @@
-import { AuthStatus, TempInstance } from './StateChannel.interfaces';
+import { AuthStatus, TempInstance } from './ContextChannel.interfaces';
 
 export default class PersistentWebSocket {
 

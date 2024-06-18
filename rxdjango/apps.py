@@ -7,7 +7,7 @@ class ReactFrameworkConfig(AppConfig):
     name = 'rxdjango'
 
     def ready(self):
-        """Discover and register StateChannel subclasses within Django apps."""
+        """Discover and register ContextChannel subclasses within Django apps."""
         from . import channels
 
         for app_config in apps.get_app_configs():
@@ -15,12 +15,12 @@ class ReactFrameworkConfig(AppConfig):
                 # Attempt to import the channels.py module from the app
                 channels_module = importlib.import_module(f"{app_config.name}.channels")
 
-                # Check for subclasses of StateChannel in the module
+                # Check for subclasses of ContextChannel in the module
                 for attr_name in dir(channels_module):
                     attr = getattr(channels_module, attr_name)
                     # Register the subclass in the global dictionary
                     if not isinstance(attr, type) or \
-                       not issubclass(attr, channels.StateChannel) or \
+                       not issubclass(attr, channels.ContextChannel) or \
                        attr.Meta.abstract:
                         continue
                     attr._signal_handler.setup(app_config)
