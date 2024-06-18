@@ -16,8 +16,8 @@ from .websocket_router import WebsocketRouter
 from .signal_handler import SignalHandler
 
 
-class StateChannelMeta(type):
-    """Metaclass for the StateChannel.
+class ContextChannelMeta(type):
+    """Metaclass for the ContextChannel.
 
     Builds the state model based on the provided fields and Meta class,
     and assigns a WebsocketRouter and a SignalHandler to it.
@@ -49,17 +49,22 @@ class StateChannelMeta(type):
         if meta.abstract:
             return new_class
 
-        if not hasattr(meta, "anchor"):
+        # The "state" property defines the top-level serializer that will
+        # be used to build the context state.
+        # This top-level serializer is called "anchor" all over the code,
+        # while anchor_id refers to the instance used to build the state.
+        if not hasattr(meta, "state"):
             raise ProgrammingError(
-                f'{new_class.__name__} must define a Meta class with an '
-                'anchor serializer'
+                f'{new_class.__name__} must define a Meta class setting the'
+                '"state" property to a serializer inheriting from'
+                'serializers.ModelSerializer'
             )
 
-        anchor = meta.anchor
+        anchor = meta.state
 
         if not isinstance(anchor, serializers.ModelSerializer):
             raise ProgrammingError(
-                f'{new_class.__name__}.Meta.anchor must be an instance of '
+                f'{new_class.__name__}.Meta.state must be an instance of '
                 'serializers.ModelSerializer'
             )
 
@@ -71,7 +76,7 @@ class StateChannelMeta(type):
         return new_class
 
 
-class StateChannel(metaclass=StateChannelMeta):
+class ContextChannel(metaclass=ContextChannelMeta):
 
     class Meta:
         abstract = True

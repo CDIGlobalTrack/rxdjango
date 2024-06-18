@@ -4,7 +4,7 @@ import {
   TempInstance,
   UnloadedInstance,
   InstanceReference,
-} from './StateChannel.interfaces';
+} from './ContextChannel.interfaces';
 
 
 export default class StateBuilder<T> {

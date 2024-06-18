@@ -1,8 +1,8 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { NoConnectionListener, TempInstance, Listener, Model } from './StateChannel.interfaces';
+import { NoConnectionListener, TempInstance, Listener, Model } from './ContextChannel.interfaces';
 
-abstract class StateChannel<T> {
+abstract class ContextChannel<T> {
   private ws: PersistentWebsocket | undefined;
   private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
@@ -108,4 +108,4 @@ abstract class StateChannel<T> {
 }
 
 
-export default StateChannel;
+export default ContextChannel;

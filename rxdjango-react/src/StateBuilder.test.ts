@@ -1,5 +1,5 @@
 import StateBuilder from './StateBuilder';
-import { TempInstance } from './StateChannel.interfaces';
+import { TempInstance } from './ContextChannel.interfaces';
 import {
   ProjectType,
   ANCHOR,

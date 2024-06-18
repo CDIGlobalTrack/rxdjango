@@ -35,12 +35,12 @@ def create_app_channels(app, apply_changes=True):
 
     code = header(
         app,
-        f'Based on all StateChannel.as_asgi() calls in {settings.ASGI_APPLICATION}',
+        f'Based on all ContextChannel.as_asgi() calls in {settings.ASGI_APPLICATION}',
         f'This is expected to match {app}/channels.py',
     )
 
     code.extend([
-        f"import {{ StateChannel }} from '@rxdjango/react';\n",
+        f"import {{ ContextChannel }} from '@rxdjango/react';\n",
         f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
@@ -180,7 +180,7 @@ def generate_ts_class(state_channel_class, urlpattern, import_types):
 
     # Base of the class
     code = [
-        f"export class {name} extends StateChannel<{state_type}> {{\n",
+        f"export class {name} extends ContextChannel<{state_type}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';\n",
         f"  args: {{ [key: string]: number | string }} = {{}};\n",

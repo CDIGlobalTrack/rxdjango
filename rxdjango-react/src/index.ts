@@ -1,3 +1,3 @@
-export { default as StateChannel } from './StateChannel';
-export * from './StateChannel.interfaces'
+export { default as ContextChannel } from './ContextChannel';
+export * from './ContextChannel.interfaces'
 export { useChannelState } from './hook';
