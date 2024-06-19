@@ -87,7 +87,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
             f'{cls.__name__}Consumer',
             (StateConsumer,),
             dict(
-                state_channel_class=cls,
+                context_channel_class=cls,
                 wsrouter=cls._wsrouter,
             ),
         )

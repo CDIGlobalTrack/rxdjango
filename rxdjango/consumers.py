@@ -67,7 +67,7 @@ class StateConsumer(AsyncWebsocketConsumer):
     async def start(self, user, tstamp):
         kwargs = self.scope['url_route']['kwargs']
         self.user = user
-        self.channel = self.state_channel_class(user, **kwargs)
+        self.channel = self.context_channel_class(user, **kwargs)
         self.user_id = self.user.id
         self.anchor_id = self.channel.anchor_id
         self.wsrouter = self.channel._wsrouter
@@ -127,7 +127,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.token = token.key
 
         kwargs = self.scope['url_route']['kwargs']
-        if not self.state_channel_class.has_permission(
+        if not self.context_channel_class.has_permission(
                 token.user,
                 **kwargs,
         ):
