@@ -359,13 +359,56 @@ class RedisStateSession(RedisSession):
         return await method(self, success)
 
 
-class RedisRelaySession:
+class _LockContextManager(RedisSession):
+    """
+    This is a base class for the two context managers that lock
+    one channel for writing or cleanup.
+    It manages the keys 6 and 7 and implements a semaphore to avoid
+    cache cleanup while instances are being written.
+    """
+    timeout = 5
 
-    async def start(self):
-        pass
+    def __init__(self, channel):
+        super().__init__(channel)
+        self.locked = None
 
-    async def acquire_write_lock(self, timeout=None):
-        script = """
+    async def __aenter__(self):
+        await self.connect()
+        _, consumer = await self._conn.subscribe(self.relay_writers_trigger)
+
+        acquire_write_lock = self._conn.register_script(self.lock_script)
+        while True:
+            acquired = await acquire_write_lock(keys=self.local_keys)
+
+            if acquired >= 0:
+                await self._conn.unsubscribe(self.relay_writers_trigger)
+                self.locked = acquired > 0
+                return
+
+            if self.timeout is not None:
+                try:
+                    await asyncio.wait_for(consumer.get(), timeout=self.timeout)
+                except asyncio.TimeoutError:
+                    await self._conn.unsubscribe(self.relay_writers_trigger)
+                    self.locked = False
+                    return
+            else:
+                await consumer.get()
+
+    async def __aexit__(self):
+        if self.locked:
+            release_write_lock = self._conn.register_script(self.release_script)
+            await release_write_lock(keys=self.local_keys)
+
+
+class WriteLock(_LockContextManager):
+    """
+    A non-exclusive lock on a channel to avoid cleanup while data is
+    being written to mongo. Increments relay_writers (KEYS[6]) during
+    write operation.
+    """
+
+    lock_script = """
         local state = tonumber(redis.call("GET", KEYS[1])) or 0
 
         if state == 0 or state == 3 then
@@ -390,38 +433,20 @@ class RedisRelaySession:
 
         return 1
         """
-        # Subscribe to lock_release
-        await self.connect()
-        _, consumer = await self._conn.subscribe(self.relay_writers_trigger)
 
-        acquire_write_lock = self._conn.register_script(script)
-        while True:
-            acquired = await acquire_write_lock(keys=self.local_keys)
-
-            if acquired >= 0:
-                await self._conn.unsubscribe(self.relay_writers_trigger)
-                return acquired > 0
-
-            if timeout:
-                try:
-                    await asyncio.wait_for(consumer.get(), timeout=timeout)
-                except asyncio.TimeoutError:
-                    await self._conn.unsubscribe(self.relay_writers_trigger)
-                    return False
-            else:
-                await consumer.get()
-
-    async def release_write_lock(self):
-        script = """
-        local writers = tonumber(redis.call("DECR", KEYS[4])) or 0
+    release_script = """
+        redis.call("DECR", KEYS[6])
         redis.call("PUBLISH", KEYS[7], 1)
         end
         """
-        release_write_lock = self._conn.register_script(script)
-        await release_write_lock(keys=self.local_keys)
 
-    async def acquire_cleanup_lock(self):
-        script = """
+class CleanupLock(_LockContextManager):
+    """
+    An exclusive lock on a channel to avoid new writes to mongo during
+    cleanup. It sets relay_writers to negative number.
+    """
+
+    lock_script = """
         -- Set the lock key to 0 to publish to release pub/sub
         local writers = tonumber(redis.call("GET", KEYS[6])) or 0
         if writers < 0 then
@@ -437,33 +462,9 @@ class RedisRelaySession:
         -- Someone is writing, wait for release
         return -1
         """
-        await self.connect()
-        # Subscribe to lock_release
-        _, consumer = await self._conn.subscribe(self.relay_writers_trigger)
 
-        acquire_cleanup_lock = self._conn.register_script(script)
-        while True:
-            acquired = await acquire-cleanup_lock(keys=self.local_keys)
-
-            if acquired >= 0:
-                await self._conn.unsubscribe(self.relay_writers_trigger)
-                return acquired > 0
-
-            if timeout:
-                try:
-                    await asyncio.wait_for(consumer.get(), timeout=timeout)
-                except asyncio.TimeoutError:
-                    await self._conn.unsubscribe(self.relay_writers_trigger)
-                    return False
-            else:
-                await consumer.get()
-
-
-    async def release_cleanup_lock(self):
-        script = """
+    release_script = """
         redis.call("SET", KEYS[6], 0)
         redis.call("PUBLISH", KEYS[7], 1)
         end
         """
-        release_cleanup_lock = self._conn.register_script(script)
-        await release_cleanup_lock(keys=self.local_keys)
