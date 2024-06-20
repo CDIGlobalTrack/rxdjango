@@ -106,7 +106,7 @@ class RedisStateSession(RedisSession):
         self.initial_state = None
         self.tstamp = None
 
-    async def start(self):
+    async def load(self):
         """Make an atomic call to redis, check the state and maybe transition
 
         States are:
@@ -357,6 +357,46 @@ class RedisStateSession(RedisSession):
     async def end(self, success):
         method = self._end_session_methods[self.initial_state]
         return await method(self, success)
+
+    async def cooldown(self):
+        # 1 state,  2 access_time, 3 instances, 4 readers
+        script = """
+        local state = tonumber(redis.call("GET", KEYS[1])) or 0
+
+        if state == 0 then
+            -- COLD state. Keep cold
+            -- clear instances list and reset readers
+            redis.call("DEL", KEYS[3])
+            redis.call("SET", KEYS[4], 0)
+            return 1
+
+        elseif state == 1 then
+            -- HEATING state. Let's not cooldown, keep heating
+            return 0
+        elseif state == 2 then
+            -- HOT state. TODO proper transition to COOLING
+            redis.call("SET", KEYS[1], 0)
+            redis.call("DEL", KEYS[3])
+            redis.call("SET", KEYS[4], 0)
+            return 1
+        elseif state == 3 then
+            -- COOLING state. Let's not race it, keep cooling
+            return 1
+        else
+            redis.call("SET", KEYS[1], 0)
+            redis.call("DEL", KEYS[3])
+            redis.call("SET", KEYS[4], 0)
+            return 1
+        end
+        """
+        await self.connect()
+        cooldown = self._conn.register_script(script)
+        result = await cooldown(
+            keys=self.local_keys,
+        )
+
+        return result > 0
+
 
 
 class _LockContextManager(RedisSession):

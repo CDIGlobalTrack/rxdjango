@@ -10,6 +10,7 @@ from django.conf import settings
 from .redis import get_tstamp, sync_get_tstamp
 from .serialize import json_dumps
 
+
 class MongoStateSession:
 
     def __init__(self, channel):
@@ -75,6 +76,10 @@ class MongoStateSession:
                 instance,
                 upsert=True,
             )
+
+    async def clear(self):
+        query = {'_anchor_id': self.anchor_id}
+        await self.collection.delete_many(query)
 
 
 class MongoSignalWriter:
