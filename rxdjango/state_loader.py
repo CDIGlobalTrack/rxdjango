@@ -46,7 +46,7 @@ class StateLoader:
         self.tstamp = None
 
     async def __aenter__(self):
-        self.cache_state = await self.redis.start()
+        self.cache_state = await self.redis.load()
         self.tstamp = self.redis.tstamp
         return self
 
