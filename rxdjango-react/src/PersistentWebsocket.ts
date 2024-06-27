@@ -62,7 +62,9 @@ export default class PersistentWebSocket {
         return;
       }
 
-      this.oninstances(message as TempInstance[]);
+      if (Array.isArray(message)) {
+        this.oninstances(message as TempInstance[]);
+      }
     };
 
     this.ws.onclose = (event) => {
