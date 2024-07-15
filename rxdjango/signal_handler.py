@@ -79,9 +79,11 @@ class SignalHandler:
                 instance.__parent_updated = True
                 instance.__old_parent = old_parent
 
-        def _relay_instance(_layer, instance, tstamp, operation):
+        def _relay_instance(_layer, instance, tstamp, operation, already_relayed=None):
             if not instance:
                 return
+            if already_relayed is None:
+                already_relayed = set()
             if isinstance(instance, models.Model):
                 instances = [instance]
             elif isinstance(instance, models.Manager):
@@ -95,6 +97,11 @@ class SignalHandler:
                 else:
                     serialized = _layer.serialize_instance(_instance, tstamp)
                 serialized['_operation'] = operation
+                key = f'{_layer.instance_type}:{_instance.id}'
+                if key in already_relayed:
+                    continue
+                already_relayed.add(key)
+
 
                 self._schedule(serialized, _layer)
 
@@ -106,13 +113,12 @@ class SignalHandler:
                         if child is None:
                             continue
                         elif isinstance(child, models.QuerySet):
-                            # children = child.all()
-                            continue
+                            children = child.all()
                         else:
                             children = [child]
-                            
+
                         for child in children:
-                            _relay_instance(child_layer, child, tstamp, operation)
+                            _relay_instance(child_layer, child, tstamp, operation, already_relayed)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
