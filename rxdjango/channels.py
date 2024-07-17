@@ -14,6 +14,8 @@ from .transaction import get_transaction_id
 from .state_model import StateModel
 from .websocket_router import WebsocketRouter
 from .signal_handler import SignalHandler
+from .redis import RedisStateSession
+from .mongo import MongoStateSession
 
 
 class ContextChannelMeta(type):
@@ -122,6 +124,14 @@ class ContextChannel(metaclass=ContextChannelMeta):
     async def receive(self, data):
         """Any data sent by user will get here"""
         pass
+
+    async def clear_cache(self):
+        redis = RedisStateSession(self)
+        mongo = MongoStateSession(self)
+        result = await redis.cooldown()
+        if result:
+            await mongo.clear()
+        return result
 
     @classmethod
     def broadcast_instance(cls, anchor_id, instance, operation='update'):
