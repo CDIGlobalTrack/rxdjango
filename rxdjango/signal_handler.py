@@ -5,6 +5,7 @@ from django.db.models.signals import (pre_save, post_save,
 from django.db import transaction, models, ProgrammingError
 from .mongo import MongoSignalWriter
 from .redis import RedisSession, sync_get_tstamp
+from .exceptions import RxDjangoBug
 
 
 class SignalHandler:
@@ -193,6 +194,9 @@ class SignalHandler:
         self.relay_map[layer.model].append(relay_instance)
 
     def _schedule(self, serialized, state_model, anchors=None):
+        if serialized['id'] is None and serialized['_operation'] == 'create':
+            raise RxDjangoBug('Saving instance without id causes data leakage. '
+                              'Check stack trace to fix this bug.')
         if transaction.get_autocommit():
             self._relay(serialized, state_model, anchors)
             return
