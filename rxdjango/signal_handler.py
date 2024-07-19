@@ -79,10 +79,11 @@ class SignalHandler:
                 instance.__parent_updated = True
                 instance.__old_parent = old_parent
 
-        def _relay_instance(_layer, instance, tstamp, operation):
+        def _relay_instance(_layer, instance, tstamp, operation, already_relayed=None):
             if not instance:
                 return
-
+            if already_relayed is None:
+                already_relayed = set()
             if isinstance(instance, models.Model):
                 instances = [instance]
             elif isinstance(instance, models.Manager):
@@ -96,6 +97,11 @@ class SignalHandler:
                 else:
                     serialized = _layer.serialize_instance(_instance, tstamp)
                 serialized['_operation'] = operation
+                key = f'{_layer.instance_type}:{_instance.id}'
+                if key in already_relayed:
+                    continue
+                already_relayed.add(key)
+
 
                 self._schedule(serialized, _layer)
 
@@ -103,8 +109,16 @@ class SignalHandler:
                     # If instance is being created in this channel,
                     # then all related objects need to be scheduled
                     for attribute, child_layer in _layer.children.items():
-                        child = getattr(instance, 'qubedevice', None)
-                        _relay_instance(child_layer, child, tstamp, operation)
+                        child = getattr(_instance, attribute, None)
+                        if child is None:
+                            continue
+                        elif isinstance(child, models.QuerySet):
+                            children = child.all()
+                        else:
+                            children = [child]
+
+                        for child in children:
+                            _relay_instance(child_layer, child, tstamp, operation, already_relayed)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
@@ -120,9 +134,9 @@ class SignalHandler:
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
                         parent = getattr(parent, reverse_acessor, None)
-                    _relay_instance(layer.origin, parent, tstamp, operation)
+                    _relay_instance(layer.origin, parent, tstamp, 'update')
                     old_pa = getattr(instance, '__old_parent', None)
-                    _relay_instance(layer.origin, old_pa, tstamp, operation)
+                    _relay_instance(layer.origin, old_pa, tstamp, 'update')
 
         def prepare_deletion(sender, instance, **kwargs):
             """Obtain anchors prior to deletion and store in instance"""
