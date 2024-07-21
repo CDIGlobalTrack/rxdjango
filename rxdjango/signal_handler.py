@@ -119,6 +119,11 @@ class SignalHandler:
                             children = [child]
 
                         for child in children:
+                            try:
+                                if child.id is None:
+                                    continue
+                            except AttributeError:
+                                pass
                             _relay_instance(child_layer, child, tstamp, operation, already_relayed)
 
         def relay_instance(sender, instance, **kwargs):
