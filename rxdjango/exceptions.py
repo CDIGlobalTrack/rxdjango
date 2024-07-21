@@ -9,3 +9,6 @@ class UnauthorizedError(Exception):
 
 class ForbiddenError(Exception):
     pass
+
+class RxDjangoBug(Exception):
+    pass
