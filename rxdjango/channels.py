@@ -10,7 +10,6 @@ from rest_framework import serializers
 from backend.celery import app
 
 from .consumers import StateConsumer
-from .transaction import get_transaction_id
 from .state_model import StateModel
 from .websocket_router import WebsocketRouter
 from .signal_handler import SignalHandler
@@ -79,6 +78,14 @@ class ContextChannelMeta(type):
 
 
 class ContextChannel(metaclass=ContextChannelMeta):
+    """This is the core API of RxDjango.
+    ContextChannel provides a state that is synchronized with
+    all connected clients through a websocket.
+    Frontend classes are automatically generated for each
+    ContextChannel subclass.
+    Subclasses of ContextChannel should reside in a file named
+    channels.py inside a django app.
+    """
 
     class Meta:
         abstract = True
