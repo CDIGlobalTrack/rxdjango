@@ -1,4 +1,4 @@
-Copyright (c) 2022 Control Devices, Inc
+Copyright (c) 2022-2024 Control Devices, Inc
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
