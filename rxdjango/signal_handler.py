@@ -130,7 +130,7 @@ class SignalHandler:
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
                 created = kwargs.get('created', None)
-                operation = kwargs.get('_operation', 'update' if created else 'create')
+                operation = kwargs.get('_operation', 'update' if not created else 'create')
                 if operation == 'create':
                     created = True
                 _relay_instance(layer, instance, tstamp, operation)
