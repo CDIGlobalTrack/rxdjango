@@ -50,16 +50,20 @@ def create_app_interfaces(app, apply_changes=True):
 
     code.append(f"import {{ InstanceType }} from '@rxdjango/react';\n")
 
+    imports = []
     for external_app, dependencies in serializers.items():
         dependencies = [dep for dep in dependencies if ts_exported(dep)]
         if not dependencies:
             continue
-        code.append(''.join([
+        interfaces = [interface_name(d) for d in dependencies]
+        imports.append(''.join([
             'import { ',
-            ', '.join([interface_name(d) for d in dependencies]),
+            ', '.join(sorted(interfaces)),
             ' } from ',
             f"'../{external_app}/{external_app}.interfaces';",
         ]))
+
+    code += sorted(imports)
 
     code.append('')  # line break
 

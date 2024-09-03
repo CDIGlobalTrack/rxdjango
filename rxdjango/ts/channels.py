@@ -156,7 +156,7 @@ def build_imports(serializers, this_app):
     code = []
     for app, app_serializers in serializers.items():
         interfaces = [ interface_name(seri) for seri in app_serializers ]
-        interfaces = ', '.join(interfaces)
+        interfaces = ', '.join(sorted(interfaces))
         path = '.' if app == this_app else f'../{app}'
         code.append(f"import {{ {interfaces} }} from '{path}/{app}.interfaces.d';")
 
