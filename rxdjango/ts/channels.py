@@ -6,8 +6,7 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from django.urls import URLPattern, URLResolver
 from django.conf import settings
 from rxdjango.consumers import StateConsumer
-from . import header
-from . import interface_name
+from . import header, interface_name, diff
 
 def create_app_channels(app, apply_changes=True):
     consumer_urlpatterns = list_consumer_patterns(app)
@@ -69,8 +68,10 @@ def create_app_channels(app, apply_changes=True):
             os.utime(ts_file_path, (py_mtime, py_mtime))
         return
 
+    difference = diff(existing, content.split('\n'), ts_file_path)
+
     if not apply_changes:
-        return True
+        return difference
 
     try:
         with open(ts_file_path, 'w') as fh:
@@ -83,7 +84,7 @@ def create_app_channels(app, apply_changes=True):
     if py_mtime:
         os.utime(ts_file_path, (py_mtime, py_mtime))
 
-    return True
+    return difference
 
 
 def get_root_routing():

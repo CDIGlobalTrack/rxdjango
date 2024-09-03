@@ -1,3 +1,6 @@
+import os
+import difflib
+import subprocess
 from django.utils import timezone
 from rest_framework import serializers
 
@@ -78,3 +81,27 @@ def header(app, *middle):
     )
 
     return code
+
+
+def diff(existing, content, filename):
+    existing[0] = existing[1] = content[0] = content[1]
+
+    filename = _git_relative_path(filename)
+
+    fromfile = os.path.join('a', filename)
+    tofile = os.path.join('b', filename)
+    dif = difflib.unified_diff(existing, content, fromfile=fromfile, tofile=tofile)
+    dif = list(dif)
+    header, body = dif[:3], dif[3:]
+    return ''.join(header) + '\n'.join(body)
+
+
+def _git_relative_path(filepath):
+    try:
+        # Run the git command to get the relative path from the repository root
+        git_root = subprocess.check_output(['git', 'rev-parse', '--show-toplevel']).strip().decode('utf-8')
+        relative_path = os.path.relpath(filepath, git_root).strip()
+        return relative_path
+    except subprocess.CalledProcessError:
+        # If the git command fails, return the original path
+        return filepath
