@@ -1,4 +1,9 @@
-import { AuthStatus, TempInstance } from './ContextChannel.interfaces';
+import {
+  AuthStatus,
+  TempInstance,
+  SystemMessage,
+} from './ContextChannel.interfaces';
+
 
 export default class PersistentWebSocket {
 
@@ -18,6 +23,7 @@ export default class PersistentWebSocket {
   public onclose: (event: CloseEvent) => void = () => {};
   public onauth: (authStatus: AuthStatus) => void = () => {};
   public oninstances: (instances: TempInstance[]) => void = () => {};
+  public onsystem: (message: SystemMessage) => void = () => {};
 
   constructor(
     url: string,
@@ -62,9 +68,16 @@ export default class PersistentWebSocket {
         return;
       }
 
-      if (Array.isArray(message)) {
+      if (event.data[0] == '[') {
         this.oninstances(message as TempInstance[]);
+      } else if (event.data[0] != '{') {
+        return;
       }
+
+      if (message['source'] == 'system') {
+        this.onsystem(message as SystemMessage);
+      }
+
     };
 
     this.ws.onclose = (event) => {

@@ -54,3 +54,8 @@ export interface AuthStatus {
   status_code: number;
   error?: string | null;
 }
+
+export interface SystemMessage {
+  source: string;
+  type: 'maintenance';
+}
