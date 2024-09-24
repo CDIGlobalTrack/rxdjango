@@ -5,9 +5,13 @@ from rxdjango.ts.interfaces import create_app_interfaces
 from rxdjango.ts.channels import create_app_channels
 
 
-def make_sdk(apply_changes=True):
+def make_sdk(apply_changes=True, quiet=False):
     print("Generating RxDjango SDK")
     check()
+
+    def log(msg):
+        if not quiet:
+            print(msg)
 
     models = apps.get_models()
     installed_apps = list(set([ x.__module__.split('.')[0] for x in models]))
@@ -15,8 +19,14 @@ def make_sdk(apply_changes=True):
     changed = False
 
     for app in installed_apps:
-        changed = create_app_interfaces(app, apply_changes) or changed
-        changed = create_app_channels(app, apply_changes) or changed
+        diff = create_app_interfaces(app, apply_changes)
+        if diff:
+            changed = True
+            log(diff)
+        diff = create_app_channels(app, apply_changes)
+        if diff:
+            changed = True
+            log(diff)
 
     return changed
 

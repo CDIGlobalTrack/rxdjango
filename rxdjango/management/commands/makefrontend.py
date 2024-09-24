@@ -12,7 +12,13 @@ class Command(BaseCommand):
         parser.add_argument('--dry-run', action='store_true',
                             help="Do not write any changes")
 
+        parser.add_argument('--quiet', action='store_true',
+                            help="Do not write any changes")
+
 
     def handle(self, *args, **kwargs):
-        changed = make_sdk(not kwargs['dry_run'])
+        changed = make_sdk(
+            not kwargs['dry_run'],
+            kwargs['quiet'],
+        )
         sys.exit(1 if changed else 0)

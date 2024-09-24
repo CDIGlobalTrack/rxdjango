@@ -9,7 +9,7 @@ from django.db.models.query import QuerySet
 from django.db.models.fields import related_descriptors
 from django.conf import settings
 from rest_framework import serializers, relations, fields
-from . import ts_exported, header, interface_name
+from . import ts_exported, header, interface_name, diff
 
 def create_app_interfaces(app, apply_changes=True):
     serializer_module_name = f'{app}.serializers'
@@ -50,16 +50,20 @@ def create_app_interfaces(app, apply_changes=True):
 
     code.append(f"import {{ InstanceType }} from '@rxdjango/react';\n")
 
+    imports = []
     for external_app, dependencies in serializers.items():
         dependencies = [dep for dep in dependencies if ts_exported(dep)]
         if not dependencies:
             continue
-        code.append(''.join([
+        interfaces = [interface_name(d) for d in dependencies]
+        imports.append(''.join([
             'import { ',
-            ', '.join([interface_name(d) for d in dependencies]),
+            ', '.join(sorted(interfaces)),
             ' } from ',
             f"'../{external_app}/{external_app}.interfaces';",
         ]))
+
+    code += sorted(imports)
 
     code.append('')  # line break
 
@@ -75,8 +79,9 @@ def create_app_interfaces(app, apply_changes=True):
     if content.split('\n')[2:] == existing[2:]:
         return
 
+    difference = diff(existing, content.split('\n'), ts_file_path)
     if not apply_changes:
-        return True
+        return difference
 
     try:
         with open(ts_file_path, 'w') as fh:
@@ -89,7 +94,7 @@ def create_app_interfaces(app, apply_changes=True):
     if py_mtime:
         os.utime(ts_file_path, (py_mtime, py_mtime))
 
-    return True
+    return difference
 
 
 def get_serializers(module):
