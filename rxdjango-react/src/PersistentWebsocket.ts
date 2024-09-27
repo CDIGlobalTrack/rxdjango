@@ -78,18 +78,15 @@ export default class PersistentWebSocket {
         this.onsystem(message as SystemMessage);
       }
 
+      if (message['source'] == 'maintenance') {
+        this.disconnect();
+        this.persistentReconnect();
+      }
+
     };
 
     this.ws.onclose = (event) => {
-      this.ws = undefined;
-
-      if (!this.authStatusReceived || !event.wasClean) {
-        console.warn("WebSocket disconnected. Reconnecting in", this.reconnectInterval, "ms");
-        this.timer = setTimeout(() => this.connect(), this.reconnectInterval);
-        // Double the reconnect interval for the next potential reconnection, but cap it at the max value
-        this.reconnectInterval = Math.min(this.reconnectInterval * 2, this.maxReconnectInterval);
-      }
-
+      this.persistentReconnect(event.wasClean);
       this.onclose(event);
     };
   }
@@ -99,6 +96,16 @@ export default class PersistentWebSocket {
       this.ws.send(data);
     } else {
       console.error("WebSocket is not open. Ready state:", this.ws?.readyState);
+    }
+  }
+
+  persistentReconnect(wasClean: boolean = false) {
+    this.ws = undefined;
+    if (!this.authStatusReceived || !wasClean) {
+      console.warn("WebSocket disconnected. Reconnecting in", this.reconnectInterval, "ms");
+      this.timer = setTimeout(() => this.connect(), this.reconnectInterval);
+      // Double the reconnect interval for the next potential reconnection, but cap it at the max value
+      this.reconnectInterval = Math.min(this.reconnectInterval * 2, this.maxReconnectInterval);
     }
   }
 
