@@ -7,7 +7,6 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from django.db import models, connection, transaction, ProgrammingError
 from rest_framework import serializers
-from backend.celery import app
 
 from .consumers import StateConsumer
 from .state_model import StateModel
