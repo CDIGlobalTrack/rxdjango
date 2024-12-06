@@ -3,7 +3,7 @@ from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
-VERSION = '0.0.15'
+VERSION = '0.0.16'
 
 setup(
     name="rxdjango",
@@ -18,8 +18,8 @@ setup(
         'channels>=4',
         'channels-redis>=4.1',
         'djangorestframework>=3',
-        'bson>=0.5',
-        'daphne>=4.1.0'
+        'daphne>=4.1.0',
+        'pytz',
     ],
     url="https://github.com/CDIGlobalTrack/rxdjango",
     include_package_data=True,
