@@ -13,9 +13,9 @@ from .serialize import json_dumps
 
 class MongoStateSession:
 
-    def __init__(self, channel):
+    def __init__(self, channel, anchor_id):
         self.channel = channel
-        self.anchor_id = channel.anchor_id
+        self.anchor_id = anchor_id
         self.user_id = channel.user_id
         self.state_model = channel._state_model
         self._tstamp = None

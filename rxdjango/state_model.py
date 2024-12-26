@@ -26,7 +26,11 @@ class StateModel:
             self.query_path = origin.query_path[:] + [query_property]
             self.index = origin.index
 
-        meta = state_serializer.Meta
+        try:
+            meta = state_serializer.Meta
+        except AttributeError:
+            meta = state_serializer.child.Meta
+
         self.model = meta.model
 
         if origin:

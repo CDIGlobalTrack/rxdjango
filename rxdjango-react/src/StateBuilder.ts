@@ -24,7 +24,7 @@ export default class StateBuilder<T> {
   private anchor: string;
 
   // The instance id of the anchor for this state
-  private anchorId: number | undefined;
+  private anchorIds: number[] | undefined;
 
   // An index with references for all nodes in the state tree
   // Key is _instance_type:id properties of instance
@@ -41,16 +41,27 @@ export default class StateBuilder<T> {
   }
 
   // Returns the current state. Every call returns a different reference.
-  public get state(): T | undefined {
-    if (this.anchorId === undefined)
+  public get state(): T | T[] | undefined {
+    if (this.anchorIds === undefined)
       return undefined;
 
-    const stateKey = `${this.anchor}:${this.anchorId}`;
-    return { ...this.index[stateKey] } as T;
+    const stateKeys = this.anchorIds.map((anchorId: number) => {
+      return `${this.anchor}:${anchorId}`;
+    });
+    if (!this.many) {
+      return { ...this.index[stateKeys[0]] } as T;
+    }
+    return stateKeys.map((stateKey: string): T[] => {
+      return { ...this.index[stateKey] } as T;
+    });
   }
 
   // Receives an update from the server, with several instances
   public update(instances: TempInstance[]) {
+    if (this.many && this.anchorIds === undefined) {
+      this.setAnchors(instances as number[]);
+      return;
+    }
     for (const instance of instances) {
       this.receiveInstance(instance);
     }
@@ -61,13 +72,17 @@ export default class StateBuilder<T> {
       throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
     }
 
-    this.anchorId = instance.id;
+    this.anchorIds = [instance.id];
+  }
+
+  private setAnchors(instanceIds: number[]) {
+    this.anchorIds = instanceIds;
   }
 
   // Handles data for one instance as received from the backend
   private receiveInstance(instance: TempInstance) {
     // The first thing backend sends must be the anchor
-    if (this.anchorId === undefined) {
+    if (this.anchorIds === undefined) {
       this.setAnchor(instance);
     }
 

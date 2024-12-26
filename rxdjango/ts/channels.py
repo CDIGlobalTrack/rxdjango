@@ -10,7 +10,6 @@ from . import header, interface_name, diff
 
 def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
-
     if not consumer_urlpatterns:
         return
 
@@ -168,6 +167,11 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     name = context_channel_class.__name__
     anchor = context_channel_class.Meta.state
+    if context_channel_class.many:
+        many = 'true'
+        anchor = anchor.child
+    else:
+        many = 'false'
 
     anchor_module = anchor.__class__.__module__
     anchor_name = anchor.__class__.__name__
@@ -185,6 +189,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';\n",
         f"  args: {{ [key: string]: number | string }} = {{}};\n",
+        f"  many = {many};\n",
     ]
 
     # Add private properties based on parameters

@@ -15,6 +15,7 @@ abstract class ContextChannel<T> {
   abstract anchor: string;
   abstract baseURL: string;
   abstract model: Model;
+  abstract many: boolean;
 
   constructor(token: string) {
     this.token = token;
@@ -43,8 +44,9 @@ abstract class ContextChannel<T> {
   }
 
   private notify() {
+    const state = this.builder!.state;
     for (const listener of this.listeners) {
-      if (this.builder!.state) listener(this.builder!.state);
+      if (state) listener(state)
     }
   }
 

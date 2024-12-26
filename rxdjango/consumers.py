@@ -26,7 +26,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.channel = None
         self.user = None
         self.token = None
-        self.anchor_id = None
+        self.anchor_ids = None
         self.wsrouter = None
         self.tstamp = None
         self.session = None
@@ -69,20 +69,32 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.user = user
         self.channel = self.context_channel_class(user, **kwargs)
         self.user_id = self.user.id
-        self.anchor_id = self.channel.anchor_id
+        self.anchor_ids = self.channel.anchor_ids
         self.wsrouter = self.channel._wsrouter
 
+        await self.send_connection_status(200)
+
+        if self.channel.many:
+            self.send(text_data=json.dumps(self.anchor_ids))
+
+        for anchor_id in self.anchor_ids:
+            await self._connect_anchor(anchor_id)
+
+        await self.channel.on_connect(tstamp)
+
+        for anchor_id in self.anchor_ids:
+            await self._load_state(anchor_id)
+
+    async def _connect_anchor(self, anchor_id):
         await self.wsrouter.connect(
             self.channel_layer,
             self.channel_name,
-            self.anchor_id,
+            anchor_id,
             self.user_id,
         )
 
-        async with StateLoader(self.channel) as loader:
-            await self.send_connection_status(200)
-            await self.channel.on_connect(tstamp)
-
+    async def _load_state(self, anchor_id):
+        async with StateLoader(self.channel, anchor_id) as loader:
             async for instances in loader.list_instances():
                 if instances:
                     data = json_dumps(instances)
@@ -108,12 +120,13 @@ class StateConsumer(AsyncWebsocketConsumer):
         if not self.channel:
             return
 
-        await self.wsrouter.disconnect(
-            self.channel_layer,
-            self.channel_name,
-            self.anchor_id,
-            self.user_id,
-        )
+        for anchor_id in self.anchor_ids:
+            await self.wsrouter.disconnect(
+                self.channel_layer,
+                self.channel_name,
+                anchor_id,
+                self.user_id,
+            )
 
         await self.channel.on_disconnect()
 

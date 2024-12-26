@@ -61,6 +61,10 @@ class ContextChannelMeta(type):
             )
 
         anchor = meta.state
+        many = False
+        if isinstance(anchor, serializers.ListSerializer):
+            many = True
+            anchor = anchor.child
 
         if not isinstance(anchor, serializers.ModelSerializer):
             raise ProgrammingError(
@@ -72,6 +76,7 @@ class ContextChannelMeta(type):
         new_class._state_model = StateModel(anchor)
         new_class._wsrouter = WebsocketRouter(new_class.name)
         new_class._signal_handler = SignalHandler(new_class)
+        new_class.many = many
 
         return new_class
 
@@ -106,12 +111,25 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.kwargs = kwargs
         self.user = user
         self.user_id = user.id
-        self.anchor_id = self.get_anchor_id(**kwargs)
+        if self.many:
+            qs = self.list_instances(**kwargs)
+            self.anchor_ids = [
+                instance.id for instance in qs.values('id')
+            ]
+        else:
+            self.anchor_ids = [
+                self.get_instance_id(**kwargs)
+            ]
 
-    def get_anchor_id(self, **kwargs):
+    def get_instance_id(self, **kwargs):
         """Subclass may implement get_anchor_id, based on url parameters,
         otherwise the first parameter will be assumed to be it"""
         return next(iter(kwargs.values()))
+
+    def list_instances(self, **kwargs):
+        """Subclass must implement this if serializer has many=True parameter.
+        Returns a queryset"""
+        raise NotImplemented
 
     @staticmethod
     def has_permission(user, **kwargs):

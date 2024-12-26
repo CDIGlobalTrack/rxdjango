@@ -61,11 +61,11 @@ class RedisSession:
         'relay_writers_trigger',
     ]
 
-    def __init__(self, channel):
+    def __init__(self, channel, anchor_id):
         self.channel = channel
 
         self.local_keys = [
-            _make_key(channel.name, channel.anchor_id, key)
+            _make_key(channel.name, anchor_id, key)
             for key in self.KEYS
         ]
 
@@ -101,8 +101,8 @@ class RedisSession:
 
 class RedisStateSession(RedisSession):
 
-    def __init__(self, channel):
-        super().__init__(channel)
+    def __init__(self, channel, anchor_id):
+        super().__init__(channel, anchor_id)
         self.initial_state = None
         self.tstamp = None
 

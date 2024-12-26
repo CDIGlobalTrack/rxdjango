@@ -32,14 +32,14 @@ class StateLoader:
         base_key (str): The base key used for all Redis keys related to this anchor ID.
     """
 
-    def __init__(self, channel):
+    def __init__(self, channel, anchor_id):
         self.channel = channel
         self.state_model = channel._state_model
 
-        self.redis = RedisStateSession(channel)
-        self.mongo = MongoStateSession(channel)
+        self.redis = RedisStateSession(channel, anchor_id)
+        self.mongo = MongoStateSession(channel, anchor_id)
 
-        self.anchor_id = channel.anchor_id
+        self.anchor_id = anchor_id
         self.user_id = channel.user_id
 
         self.cache_state = None
