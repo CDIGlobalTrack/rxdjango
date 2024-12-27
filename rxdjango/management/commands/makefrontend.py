@@ -13,12 +13,15 @@ class Command(BaseCommand):
                             help="Do not write any changes")
 
         parser.add_argument('--quiet', action='store_true',
-                            help="Do not write any changes")
+                            help="Do not output logs")
+        parser.add_argument('--force', '-f', action='store_true',
+                            help="Rebuild all files regardless of changes")
 
 
     def handle(self, *args, **kwargs):
         changed = make_sdk(
             not kwargs['dry_run'],
             kwargs['quiet'],
+            kwargs['force'],
         )
         sys.exit(1 if changed else 0)

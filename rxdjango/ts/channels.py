@@ -8,7 +8,7 @@ from django.conf import settings
 from rxdjango.consumers import StateConsumer
 from . import header, interface_name, diff
 
-def create_app_channels(app, apply_changes=True):
+def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
 
     if not consumer_urlpatterns:
@@ -27,7 +27,7 @@ def create_app_channels(app, apply_changes=True):
     existing = []
 
     if os.path.exists(ts_file_path):
-        if py_mtime == os.path.getmtime(ts_file_path):
+        if not force and py_mtime == os.path.getmtime(ts_file_path):
             return
         with open(ts_file_path, 'r') as file:
             existing = file.read().split('\n')
