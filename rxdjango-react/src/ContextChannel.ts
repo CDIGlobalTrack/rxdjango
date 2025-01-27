@@ -25,7 +25,7 @@ abstract class ContextChannel<T> {
     if (this.builder)
       return;
 
-    this.builder = new StateBuilder<T>(this.model, this.anchor);
+    this.builder = new StateBuilder<T>(this.model, this.anchor, this.many);
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
     ws.onclose = this.onclose.bind(this);
@@ -46,7 +46,7 @@ abstract class ContextChannel<T> {
   private notify() {
     const state = this.builder!.state;
     for (const listener of this.listeners) {
-      if (state) listener(state)
+      if (state) listener(state as T);
     }
   }
 

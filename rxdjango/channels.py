@@ -4,6 +4,7 @@ import pymongo
 from django.utils import timezone
 from hashlib import md5
 from asgiref.sync import async_to_sync
+from channels.db import database_sync_to_async
 from django.conf import settings
 from django.db import models, connection, transaction, ProgrammingError
 from rest_framework import serializers
@@ -111,14 +112,20 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.kwargs = kwargs
         self.user = user
         self.user_id = user.id
+     
+    async def initialize_anchors(self): 
         if self.many:
-            qs = self.list_instances(**kwargs)
-            self.anchor_ids = [
-                instance.id for instance in qs.values('id')
-            ]
+            qs = await self.list_instances(**self.kwargs)
+            await self._fetch_instance_ids(qs)
         else:
             self.anchor_ids = [
-                self.get_instance_id(**kwargs)
+                self.get_instance_id(**self.kwargs)
+            ]
+            
+    @database_sync_to_async
+    def _fetch_instance_ids(self, qs):
+        self.anchor_ids = [
+                instance['id'] for instance in qs.values('id')
             ]
 
     def get_instance_id(self, **kwargs):

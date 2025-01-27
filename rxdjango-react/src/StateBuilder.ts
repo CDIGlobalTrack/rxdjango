@@ -35,9 +35,12 @@ export default class StateBuilder<T> {
   // in react
   private refs: { [key:string]: InstanceReference[] } = {};
 
-  constructor(model: Model, anchor: string) {
+  private many: boolean;
+
+  constructor(model: Model, anchor: string, many: boolean) {
     this.model = model;
     this.anchor = anchor;
+    this.many = many;
   }
 
   // Returns the current state. Every call returns a different reference.
@@ -51,19 +54,22 @@ export default class StateBuilder<T> {
     if (!this.many) {
       return { ...this.index[stateKeys[0]] } as T;
     }
-    return stateKeys.map((stateKey: string): T[] => {
+    return stateKeys.map((stateKey: string): T => {
       return { ...this.index[stateKey] } as T;
     });
   }
 
   // Receives an update from the server, with several instances
-  public update(instances: TempInstance[]) {
-    if (this.many && this.anchorIds === undefined) {
+  public update(instances: TempInstance[] | number[]) {
+    if (typeof instances[0] === 'number' && this.many && this.anchorIds === undefined) {
       this.setAnchors(instances as number[]);
       return;
-    }
-    for (const instance of instances) {
-      this.receiveInstance(instance);
+    } else if (typeof instances[0] === 'object') {
+      for (const instance of instances) {
+        this.receiveInstance(instance as TempInstance);
+      }
+    } else {
+      throw new Error('Expected first array of ids then arrays of instances');
     }
   }
 
