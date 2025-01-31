@@ -112,8 +112,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.kwargs = kwargs
         self.user = user
         self.user_id = user.id
+        self._consumer = None  # will be set by consumer
+
+    async def send(self, *args, **kwargs):
+        await self._consumer.send(*args, **kwargs)
      
-    async def initialize_anchors(self): 
+    async def initialize_anchors(self):
         if self.many:
             qs = await self.list_instances(**self.kwargs)
             await self._fetch_instance_ids(qs)
@@ -133,10 +137,40 @@ class ContextChannel(metaclass=ContextChannelMeta):
         otherwise the first parameter will be assumed to be it"""
         return next(iter(kwargs.values()))
 
-    def list_instances(self, **kwargs):
+    async def list_instances(self, **kwargs):
         """Subclass must implement this if serializer has many=True parameter.
         Returns a queryset"""
         raise NotImplemented
+
+    async def add_instance(self, instance):
+        qs = await self.list_instances()
+        if not await self._check_instance(qs, instance):
+            return
+        serialized = await self.serialize_instance(instance)
+        serialized['_operation'] = 'create'
+        self.anchor_ids.append(instance.id)
+        await self._consumer.connect_anchor(instance.id)
+        await self.send(text_data=json.dumps([serialized], default=str))
+
+    @database_sync_to_async
+    def serialize_instance(self, instance, tstamp=0):
+        return self._state_model.serialize_instance(instance, tstamp)
+
+    @database_sync_to_async
+    def _check_instance(self, qs, instance):
+        instance = qs.filter(id=instance.id).first()
+        return bool(instance)
+
+    async def remove_instance(self, instance):
+        if instance.id not in self.anchor_ids:
+            return
+        serialized = {
+            'id': instance.id,
+            '_operation': 'delete',
+            '_instance_type': self._state_model.instance_type,
+        }
+        await self._consumer.disconnect_anchor(instance.id)
+        await self.send(text_data=json.dumps([serialized], default=str))
 
     @staticmethod
     def has_permission(user, **kwargs):

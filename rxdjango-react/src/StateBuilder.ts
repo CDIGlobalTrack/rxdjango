@@ -22,6 +22,7 @@ export default class StateBuilder<T> {
 
   // Anchor is the _instance_type property of the root model
   private anchor: string;
+  private rootType: string | undefined;
 
   // The instance id of the anchor for this state
   private anchorIds: number[] | undefined;
@@ -41,6 +42,7 @@ export default class StateBuilder<T> {
     this.model = model;
     this.anchor = anchor;
     this.many = many;
+    this.rootType = undefined;
   }
 
   // Returns the current state. Every call returns a different reference.
@@ -90,9 +92,24 @@ export default class StateBuilder<T> {
     // The first thing backend sends must be the anchor
     if (this.anchorIds === undefined) {
       this.setAnchor(instance);
+    } else if (this.rootType === undefined) {
+      this.rootType = instance._instance_type;
+    } else if (
+      instance._instance_type === this.rootType &&
+      this.many &&
+      instance._operation === 'create'
+    ) {
+      this.anchorIds?.push(instance.id);
+    } else if (
+      instance._instance_type === this.rootType &&
+      this.many &&
+      instance._operation === 'delete'
+    ) {
+      this.anchorIds = this.anchorIds?.filter(id => id !== instance.id);
     }
-
+    
     const _instance = instance as unknown as { [key: string]: any };
+
     // The key in the index for this instance
     const key = `${_instance._instance_type}:${_instance.id}`;
 

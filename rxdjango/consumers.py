@@ -69,6 +69,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.user = user
         self.channel = self.context_channel_class(user, **kwargs)
         await self.channel.initialize_anchors()
+        self.channel._consumer = self
         self.user_id = self.user.id
         self.anchor_ids = self.channel.anchor_ids
         self.wsrouter = self.channel._wsrouter
@@ -79,15 +80,23 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps(self.anchor_ids))
 
         for anchor_id in self.anchor_ids:
-            await self._connect_anchor(anchor_id)
+            await self.connect_anchor(anchor_id)
 
         await self.channel.on_connect(tstamp)
 
         for anchor_id in self.anchor_ids:
             await self._load_state(anchor_id)
 
-    async def _connect_anchor(self, anchor_id):
+    async def connect_anchor(self, anchor_id):
         await self.wsrouter.connect(
+            self.channel_layer,
+            self.channel_name,
+            anchor_id,
+            self.user_id,
+        )
+
+    async def disconnect_anchor(self, anchor_id):
+        await self.wsrouter.disconnect(
             self.channel_layer,
             self.channel_name,
             anchor_id,
