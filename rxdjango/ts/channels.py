@@ -227,7 +227,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
         call_params = ', '.join(list(hints.keys()))
 
-        code.append(f"  public async {camel_action}({params}): {return_type} {{")
+        code.append(f"  public async {camel_action}({params}): Promise<{return_type}> {{")
         code.append(f"    return await this.callAction('{action.__name__}', [{call_params}]);")
         code.append(f"  }}")
 

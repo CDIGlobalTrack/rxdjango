@@ -6,7 +6,6 @@ export const useChannelState = <T>(channel: ContextChannel<T | T[]>) => {
   const [noConnectionSince, setNoConnectionSince] = useState<Date>();
 
   useEffect(() => {
-    // FIX: passing twice here
     const unsubscribe = channel.subscribe(setReactState, setNoConnectionSince);
 
     return () => {

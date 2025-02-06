@@ -25,7 +25,7 @@ export default class StateBuilder<T> {
   private rootType: string | undefined;
 
   // The instance id of the anchor for this state
-  private anchorIds: number[] | undefined;
+  private anchorIds: number[] = [];
 
   // An index with references for all nodes in the state tree
   // Key is _instance_type:id properties of instance
@@ -35,6 +35,9 @@ export default class StateBuilder<T> {
   // recursively change references of objects that need to be triggered
   // in react
   private refs: { [key:string]: InstanceReference[] } = {};
+
+  // A track of all anchors in context, to avoid duplication
+  private anchorIndex: { [key:number]: boolean } = {};
 
   private many: boolean;
 
@@ -63,15 +66,12 @@ export default class StateBuilder<T> {
 
   // Receives an update from the server, with several instances
   public update(instances: TempInstance[] | number[]) {
-    if (typeof instances[0] === 'number' && this.many && this.anchorIds === undefined) {
-      this.setAnchors(instances as number[]);
-      return;
-    } else if (typeof instances[0] === 'object') {
+    if (typeof instances[0] === 'object') {
       for (const instance of instances) {
         this.receiveInstance(instance as TempInstance);
       }
     } else {
-      throw new Error('Expected first array of ids then arrays of instances');
+      throw new Error('Expected array of instances');
     }
   }
 
@@ -90,22 +90,28 @@ export default class StateBuilder<T> {
   // Handles data for one instance as received from the backend
   private receiveInstance(instance: TempInstance) {
     // The first thing backend sends must be the anchor
-    if (this.anchorIds === undefined) {
-      this.setAnchor(instance);
-    } else if (this.rootType === undefined) {
+    if (this.many && instance._instance_type && this.rootType === undefined) {
       this.rootType = instance._instance_type;
-    } else if (
-      instance._instance_type === this.rootType &&
+    }
+    else if (this.anchorIds.length === 0 && !this.many) {
+      this.setAnchor(instance);
+    }
+    // Increase or decrease anchors if this is an anchor
+    if (
       this.many &&
-      instance._operation === 'create'
+      instance._instance_type === this.rootType &&
+      instance._operation === 'initial_state' &&
+      !this.anchorIndex[instance.id]
     ) {
       this.anchorIds?.push(instance.id);
+      this.anchorIndex[instance.id] = true;
     } else if (
-      instance._instance_type === this.rootType &&
       this.many &&
+      instance._instance_type === this.rootType &&
       instance._operation === 'delete'
     ) {
       this.anchorIds = this.anchorIds?.filter(id => id !== instance.id);
+      delete this.anchorIndex[instance.id];
     }
     
     const _instance = instance as unknown as { [key: string]: any };

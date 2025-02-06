@@ -11,11 +11,12 @@ from rest_framework import serializers
 
 from .consumers import StateConsumer
 from .state_model import StateModel
+from .state_loader import StateLoader
 from .websocket_router import WebsocketRouter
 from .signal_handler import SignalHandler
 from .redis import RedisStateSession
 from .mongo import MongoStateSession
-
+from .serialize import json_dumps
 
 class ContextChannelMeta(type):
     """Metaclass for the ContextChannel.
@@ -142,15 +143,18 @@ class ContextChannel(metaclass=ContextChannelMeta):
         Returns a queryset"""
         raise NotImplemented
 
-    async def add_instance(self, instance):
-        qs = await self.list_instances()
-        if not await self._check_instance(qs, instance):
-            return
-        serialized = await self.serialize_instance(instance)
-        serialized['_operation'] = 'create'
+    async def add_instance(self, instance, trusted=False):
+        if not trusted:
+            qs = await self.list_instances()
+            if not await self._check_instance(qs, instance):
+                return
         self.anchor_ids.append(instance.id)
         await self._consumer.connect_anchor(instance.id)
-        await self.send(text_data=json.dumps([serialized], default=str))
+        async with StateLoader(self, instance.id) as loader:
+            async for instances in loader.list_instances():
+                if instances:
+                    data = json_dumps(instances)
+                    await self.send(text_data=data)
 
     @database_sync_to_async
     def serialize_instance(self, instance, tstamp=0):
@@ -162,15 +166,25 @@ class ContextChannel(metaclass=ContextChannelMeta):
         return bool(instance)
 
     async def remove_instance(self, instance):
-        if instance.id not in self.anchor_ids:
+        return await self._remove_instance(instance.id, True)
+
+    async def _remove_instance(self, instance_id, remove):
+        if instance_id not in self.anchor_ids:
             return
         serialized = {
-            'id': instance.id,
+            'id': instance_id,
             '_operation': 'delete',
             '_instance_type': self._state_model.instance_type,
         }
-        await self._consumer.disconnect_anchor(instance.id)
+        await self._consumer.disconnect_anchor(instance_id)
         await self.send(text_data=json.dumps([serialized], default=str))
+        if remove:
+            self.anchor_ids.remove(instance_id)
+
+    async def clear(self):
+        for instance_id in self.anchor_ids:
+            await self._remove_instance(instance_id, False)
+        self.anchor_ids = []
 
     @staticmethod
     def has_permission(user, **kwargs):

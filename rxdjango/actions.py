@@ -14,7 +14,10 @@ def action(method):
     """
     if not asyncio.iscoroutinefunction(method):
         raise ActionNotAsync(f'@action decorator requires "{method.__name__}" to be async')
-    __actions.add(method)
+    wrapped = method
+    while getattr(wrapped, '__wrapped__', None):
+        wrapped = wrapped.__wrapped__
+    __actions.add(wrapped)
     return method
 
 
@@ -27,9 +30,17 @@ def list_actions(channel):
 
 async def execute_action(channel, method_name, params):
     method = getattr(channel, method_name, None)
+    _verify_method(method)
+    return await method(*params)
+
+
+def _verify_method(method):
     if not method:
         raise ForbiddenError
+    if getattr(method, '__func__', None):
+        method = method.__func__
+    while getattr(method, '__wrapped__', None):
+        method = method.__wrapped__
     if not method in __actions:
         raise ForbiddenError
 
-    return await method(*params)

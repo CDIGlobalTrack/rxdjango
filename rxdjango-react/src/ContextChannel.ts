@@ -1,7 +1,7 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
 import { NoConnectionListener, TempInstance, Listener, Model } from './ContextChannel.interfaces';
-import { Action, ActionResponse, ActionIndex } from './actions.d';
+import { Action, ActionResponse, ActionIndex, CallPromise } from './actions.d';
 
 abstract class ContextChannel<T> {
   private ws: PersistentWebsocket | undefined;
@@ -26,12 +26,12 @@ abstract class ContextChannel<T> {
   public init() {
     if (this.builder)
       return;
-
+    
     this.builder = new StateBuilder<T>(this.model, this.anchor, this.many);
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
-    ws.onclose = this.onclose.bind(this);
-    ws.onopen = this.onopen.bind(this);
+    ws.onClose = this.onclose.bind(this);
+    ws.onOpen = this.onopen.bind(this);
 
     ws.onInstances = (instances) => {
       this.receiveInstances(instances);
@@ -87,7 +87,7 @@ abstract class ContextChannel<T> {
     const activeCalls = this.activeCalls;
     return new Promise((resolve, reject) => {
       activeCalls[callId] = {resolve, reject} as CallPromise<T>;
-      this.ws.send(JSON.stringify(cmd));
+      this.ws?.send(JSON.stringify(cmd));
     });
   }
 

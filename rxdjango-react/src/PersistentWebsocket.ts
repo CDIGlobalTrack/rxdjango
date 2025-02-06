@@ -24,7 +24,7 @@ export default class PersistentWebSocket {
   public onClose: (event: CloseEvent) => void = () => {};
   public onAuth: (authStatus: AuthStatus) => void = () => {};
   public onInstances: (instances: TempInstance[]) => void = () => {};
-  public onActionResponse: (response: ActionResponse) => void = () => {};
+  public onActionResponse: (response: ActionResponse<unknown>) => void = () => {};
   public onSystem: (message: SystemMessage) => void = () => {};
 
   constructor(
@@ -77,12 +77,12 @@ export default class PersistentWebSocket {
       }
 
       if (message['callId']) {
-        this.onActionResponse(message as ActionResponse);
+        this.onActionResponse(message as ActionResponse<unknown>);
         return;
       }
       
       if (message['source'] == 'system') {
-        this.onsystem(message as SystemMessage);
+        this.onSystem(message as SystemMessage);
       }
 
       if (message['source'] == 'maintenance') {
@@ -94,7 +94,7 @@ export default class PersistentWebSocket {
 
     this.ws.onclose = (event) => {
       this.persistentReconnect(event.wasClean);
-      this.onclose(event);
+      this.onClose(event);
     };
   }
 

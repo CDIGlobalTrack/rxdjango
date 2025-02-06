@@ -3,4 +3,6 @@ build
 dist
 rxdjango.egg-info
 node_modules
-dist
+rxdjango-react/node_modules
+
+rxdjango-react/dist

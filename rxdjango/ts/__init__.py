@@ -20,6 +20,9 @@ TYPEMAP = {
     bool: 'boolean',
     type(None): 'null',
     QuerySet: 'number[]',
+    # FIXME: we need to check the dict type and convert properly
+    # Now we only support string: string
+    dict: '{ [key: string]: string }',
 }
 
 def interface_name(Serializer):

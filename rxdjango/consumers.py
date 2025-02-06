@@ -50,7 +50,8 @@ class StateConsumer(AsyncWebsocketConsumer):
 
     async def receive_authentication(self, text_data):
         # If user is not logged, we expect credentials
-        data = json.loads(text_data)
+        # data = json.loads(text_data)
+        data = text_data
         token = data.get('token', None)
         last_update  = data.get('last_update', None)
 
@@ -82,9 +83,6 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.wsrouter = self.channel._wsrouter
 
         await self.send_connection_status(200)
-
-        if self.channel.many:
-            await self.send(text_data=json.dumps(self.anchor_ids))
 
         for anchor_id in self.anchor_ids:
             await self.connect_anchor(anchor_id)
@@ -176,7 +174,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         params = action.pop('params')
 
         try:
-            action['result'] = execute_action(self.channel, method_name, params)
+            action['result'] = await execute_action(self.channel, method_name, params)
             await self.send(text_data=json.dumps(action))
         except Exception as e:
             action['error'] = 'Error'
