@@ -77,9 +77,13 @@ class MongoStateSession:
                 upsert=True,
             )
 
-    async def clear(self):
-        query = {'_anchor_id': self.anchor_id}
-        await self.collection.delete_many(query)
+    @staticmethod
+    async def clear(channel_class, anchor_id):
+        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        db = client[settings.MONGO_STATE_DB]
+        collection = db[channel_class.__name__.lower()]
+        query = {'_anchor_id': anchor_id}
+        await collection.delete_many(query)
 
 
 class MongoSignalWriter:
