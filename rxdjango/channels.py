@@ -153,6 +153,8 @@ class ContextChannel(metaclass=ContextChannelMeta):
         async with StateLoader(self, instance.id) as loader:
             async for instances in loader.list_instances():
                 if instances:
+                    for instance in instances:
+                        instance['_operation'] = 'initial_state'
                     data = json_dumps(instances)
                     await self.send(text_data=data)
 
