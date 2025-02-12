@@ -201,12 +201,15 @@ class ContextChannel(metaclass=ContextChannelMeta):
         pass
 
     async def clear_cache(self):
-        redis = RedisStateSession(self)
-        mongo = MongoStateSession(self)
-        result = await redis.cooldown()
-        if result:
-            await mongo.clear()
-        return result
+        final_result = True
+        for anchor_id in self.anchor_ids:
+            redis = RedisStateSession(self)
+            mongo = MongoStateSession(self)
+            result = await redis.cooldown()
+            if result:
+                await mongo.clear()
+            final_result = final_result and result
+        return final_result
 
     @classmethod
     def broadcast_instance(cls, anchor_id, instance, operation='update'):
