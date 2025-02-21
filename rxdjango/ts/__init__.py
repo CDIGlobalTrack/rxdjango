@@ -101,7 +101,8 @@ def header(app, *middle):
 
 
 def diff(existing, content, filename):
-    existing[0] = existing[1] = content[0] = content[1]
+    if len(existing) > 1:
+        existing[0] = existing[1] = content[0] = content[1]
 
     filename = _git_relative_path(filename)
 

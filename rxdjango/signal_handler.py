@@ -1,3 +1,5 @@
+import channels.layers
+from asgiref.sync import async_to_sync
 from collections import defaultdict
 from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
@@ -12,6 +14,7 @@ class SignalHandler:
 
     def __init__(self, channel_class):
         self.channel_class = channel_class
+        self.meta = channel_class.meta
         self.name = channel_class.name
         self.state_model = channel_class._state_model
         self.wsrouter = channel_class._wsrouter
@@ -39,8 +42,11 @@ class SignalHandler:
         for model_layer in self.state_model.models():
             self._connect_layer(model_layer)
 
-    def _connect_layer(self, layer):
+        if self.channel_class.meta.auto_update:
+            self._connect_anchor_events()
 
+    def _connect_layer(self, layer):
+        """Register signals for models of this layer"""
         def relay_instance_optimistically(sender, instance, **kwargs):
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
@@ -102,7 +108,6 @@ class SignalHandler:
                 if key in already_relayed:
                     continue
                 already_relayed.add(key)
-
 
                 self._schedule(serialized, _layer)
 
@@ -198,6 +203,45 @@ class SignalHandler:
 
         self.relay_map[layer.model].append(relay_instance)
 
+    def _connect_anchor_events(self):
+        """Add signal to broadcast creation and deletion of instances"""
+        anchor_model = self.channel_class.meta.state.child.Meta.model
+        channel_layer = channels.layers.get_channel_layer()
+
+        def add_to_list(sender, instance, **kwargs):
+            if sender is not anchor_model or not kwargs.get('created', False):
+                return
+            async_to_sync(channel_layer.group_send)(
+                self.channel_class._anchor_events_channel,
+                {
+                    'type': 'instances.list.add',
+                    'instance_id': instance.id,
+                },
+            )
+        def remove_from_list(sender, instance, **kwargs):
+            if sender is not anchor_model:
+                return
+            async_to_sync(channel_layer.group_send)(
+                self.channel_class._anchor_events_channel,
+                {
+                    'type': 'instances.list.remove',
+                    'instance_id': instance._serialized['id'],
+                },
+            )
+
+        post_save.connect(
+            add_to_list,
+            sender=anchor_model,
+            dispatch_uid=f'{anchor_model.__name__}-list-add',
+            weak=False,
+        )
+        post_delete.connect(
+            remove_from_list,
+            sender=anchor_model,
+            dispatch_uid=f'{anchor_model.__name__}-list-remove',
+            weak=False,
+        )
+
     def _schedule(self, serialized, state_model, anchors=None):
         if serialized['id'] is None and serialized['_operation'] == 'create':
             raise RxDjangoBug('Saving instance without id causes data leakage. '
@@ -214,11 +258,9 @@ class SignalHandler:
         """Send one update for both cache and connected clients"""
         user_id = serialized.get('_user_key', None)
         payload = [serialized]
-        #print(f'Relay from {serialized["_instance_type"]}')
         if anchors is None:
             anchors = state_model.get_anchors(serialized)
         for anchor in anchors:
-            #print(f'... to {anchor.__class__.__name__} {anchor}')
             deltas = self.mongo.write_instances(anchor.id, payload)
             if deltas:
                 self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)

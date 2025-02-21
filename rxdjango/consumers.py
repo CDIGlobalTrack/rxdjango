@@ -87,10 +87,26 @@ class StateConsumer(AsyncWebsocketConsumer):
         for anchor_id in self.anchor_ids:
             await self.connect_anchor(anchor_id)
 
+        if self.channel.meta.auto_update:
+            await self.channel_layer.group_add(
+                self.channel._anchor_events_channel,
+                self.channel_name,
+            )
+
         await self.channel.on_connect(tstamp)
 
         for anchor_id in self.anchor_ids:
             await self._load_state(anchor_id)
+
+    # Called by channel layers
+    async def instances_list_add(self, event):
+        instance_id = event['instance_id']
+        if await self.channel.is_visible(instance_id):
+            await self.channel.add_instance(instance_id, at_beginning=True)
+
+    async def instances_list_remove(self, event):
+        instance_id = event['instance_id']
+        await self.channel.remove_instance(instance_id)
 
     async def connect_anchor(self, anchor_id):
         await self.wsrouter.connect(
@@ -189,3 +205,10 @@ class StateConsumer(AsyncWebsocketConsumer):
         text_data = json_dumps(data)
         close = error != None
         await self.send(text_data=text_data, close=close)
+
+    async def prepend_anchor_id(self, anchor_id):
+        data = {
+            'prependAnchor': anchor_id,
+        }
+        text_data = json_dumps(data)
+        await self.send(text_data=text_data)

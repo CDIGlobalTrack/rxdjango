@@ -68,6 +68,8 @@ class ContextChannelMeta(type):
             many = True
             anchor = anchor.child
 
+        meta.auto_update = getattr(meta, 'auto_update', False) and many
+
         if not isinstance(anchor, serializers.ModelSerializer):
             raise ProgrammingError(
                 f'{new_class.__name__}.Meta.state must be an instance of '
@@ -75,10 +77,13 @@ class ContextChannelMeta(type):
             )
 
         # Attach the state model, websocket router, and signal handler.
+        new_class.meta = meta
+        new_class.many = many
         new_class._state_model = StateModel(anchor)
         new_class._wsrouter = WebsocketRouter(new_class.name)
         new_class._signal_handler = SignalHandler(new_class)
-        new_class.many = many
+        new_class._anchor_model = anchor.Meta.model
+        new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
 
         return new_class
 
@@ -143,14 +148,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
         Returns a queryset"""
         raise NotImplemented
 
-    async def add_instance(self, instance, trusted=False):
-        if not trusted:
-            qs = await self.list_instances()
-            if not await self._check_instance(qs, instance):
-                return
-        self.anchor_ids.append(instance.id)
-        await self._consumer.connect_anchor(instance.id)
-        async with StateLoader(self, instance.id) as loader:
+    async def add_instance(self, instance_id, at_beginning=False):
+        if at_beginning:
+            await self._consumer.prepend_anchor_id(instance_id)
+        self.anchor_ids.append(instance_id)
+        await self._consumer.connect_anchor(instance_id)
+        async with StateLoader(self, instance_id) as loader:
             async for instances in loader.list_instances():
                 if instances:
                     for instance in instances:
@@ -167,8 +170,8 @@ class ContextChannel(metaclass=ContextChannelMeta):
         instance = qs.filter(id=instance.id).first()
         return bool(instance)
 
-    async def remove_instance(self, instance):
-        return await self._remove_instance(instance.id, True)
+    async def remove_instance(self, instance_id):
+        return await self._remove_instance(instance_id, True)
 
     async def _remove_instance(self, instance_id, remove):
         if instance_id not in self.anchor_ids:
@@ -191,7 +194,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
     @staticmethod
     def has_permission(user, **kwargs):
         """Implement this method to check if user has permission on a channel"""
-        return True
+        return NotImplemented
+
+    async def is_visible(self, instance_id):
+        """Implement this to check if a new instance should be added to this
+        channel. You should check if user permission on instance"""
+        return NotImplemented
 
     async def on_connect(self, tstamp):
         """Called after user has been authenticated.

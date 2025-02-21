@@ -25,6 +25,7 @@ export default class PersistentWebSocket {
   public onAuth: (authStatus: AuthStatus) => void = () => {};
   public onInstances: (instances: TempInstance[]) => void = () => {};
   public onActionResponse: (response: ActionResponse<unknown>) => void = () => {};
+  public onAnchorPrepend: (anchorId: number) => void = () => {};
   public onSystem: (message: SystemMessage) => void = () => {};
 
   constructor(
@@ -79,6 +80,10 @@ export default class PersistentWebSocket {
       if (message['callId']) {
         this.onActionResponse(message as ActionResponse<unknown>);
         return;
+      }
+
+      if (message['prependAnchor']) {
+        this.onAnchorPrepend(message['prependAnchor'] as number);
       }
       
       if (message['source'] == 'system') {
