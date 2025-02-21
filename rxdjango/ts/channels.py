@@ -8,7 +8,8 @@ from django.urls import URLPattern, URLResolver
 from django.conf import settings
 from rxdjango.consumers import StateConsumer
 from rxdjango.actions import list_actions
-from . import header, interface_name, diff, get_ts_type, snake_to_camel
+from . import (header, interface_name, diff, get_ts_type, snake_to_camel,
+               TYPEMAP)
 
 def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
@@ -23,7 +24,6 @@ def create_app_channels(app, apply_changes=True, force=False):
 
     if os.path.exists(channel_path):
         py_mtime = os.path.getmtime(channel_path)
-
 
     existing = []
 
@@ -197,6 +197,20 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     # Add private properties based on parameters
     # for key, ts_type in parameters.items():
     #     code.append(f"  {key}: {ts_type};")
+
+    if getattr(context_channel_class, 'RuntimeState', False):
+        runtime_type = f'{context_channel_class.__name__}RuntimeState'
+        code.append(f'  runtimeState: {runtime_type};\n')
+        types = typing.get_type_hints(context_channel_class.RuntimeState)
+
+        code = [
+            f"export interface {runtime_type} {{\n"
+        ] + [
+            f"  {var}: {TYPEMAP[_type]};\n"
+            for var, _type in types.items()
+        ] + [
+            "}"
+        ] + code
 
     code.append(f'  baseURL: string = SOCKET_URL;\n')
 
