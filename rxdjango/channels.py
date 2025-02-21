@@ -77,13 +77,13 @@ class ContextChannelMeta(type):
             )
 
         # Attach the state model, websocket router, and signal handler.
+        new_class.meta = meta
+        new_class.many = many
         new_class._state_model = StateModel(anchor)
         new_class._wsrouter = WebsocketRouter(new_class.name)
         new_class._signal_handler = SignalHandler(new_class)
         new_class._anchor_model = anchor.Meta.model
         new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
-        new_class.many = many
-        new_class.meta = meta
 
         return new_class
 
@@ -148,7 +148,9 @@ class ContextChannel(metaclass=ContextChannelMeta):
         Returns a queryset"""
         raise NotImplemented
 
-    async def add_instance(self, instance_id):
+    async def add_instance(self, instance_id, at_beginning=False):
+        if at_beginning:
+            await self._consumer.prepend_anchor_id(instance_id)
         self.anchor_ids.append(instance_id)
         await self._consumer.connect_anchor(instance_id)
         async with StateLoader(self, instance_id) as loader:
@@ -194,7 +196,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
 
     async def is_visible(self, instance_id):
         """Implement this to check if a new instance should be added to this
-        channel. You should check if user permission on instance
+        channel. You should check if user permission on instance"""
         return NotImplemented
 
     async def on_connect(self, tstamp):

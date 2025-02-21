@@ -48,6 +48,11 @@ export default class StateBuilder<T> {
     this.rootType = undefined;
   }
 
+  public prependAnchorId(anchorId: number) {
+      this.anchorIds.unshift(anchorId);
+      this.anchorIndex[anchorId] = true;
+  }
+
   // Returns the current state. Every call returns a different reference.
   public get state(): T | T[] | undefined {
     if (this.anchorIds === undefined)

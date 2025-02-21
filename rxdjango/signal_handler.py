@@ -1,4 +1,5 @@
 import channels.layers
+from asgiref.sync import async_to_sync
 from collections import defaultdict
 from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
@@ -41,7 +42,7 @@ class SignalHandler:
         for model_layer in self.state_model.models():
             self._connect_layer(model_layer)
 
-        if self.channel_class.Meta.auto_update:
+        if self.channel_class.meta.auto_update:
             self._connect_anchor_events()
 
     def _connect_layer(self, layer):
@@ -204,27 +205,26 @@ class SignalHandler:
 
     def _connect_anchor_events(self):
         """Add signal to broadcast creation and deletion of instances"""
-        anchor_model = self.channel_class.Meta.state.Meta.model
+        anchor_model = self.channel_class.meta.state.child.Meta.model
         channel_layer = channels.layers.get_channel_layer()
 
         def add_to_list(sender, instance, **kwargs):
             if sender is not anchor_model or not kwargs.get('created', False):
                 return
-            channel_layer.group_send(
+            async_to_sync(channel_layer.group_send)(
                 self.channel_class._anchor_events_channel,
                 {
-                    'type': 'instances.list.add'
+                    'type': 'instances.list.add',
                     'instance_id': instance.id,
                 },
             )
-
         def remove_from_list(sender, instance, **kwargs):
             if sender is not anchor_model:
                 return
-            channel_layer.group_send(
+            async_to_sync(channel_layer.group_send)(
                 self.channel_class._anchor_events_channel,
                 {
-                    'type': 'instances.list.remove'
+                    'type': 'instances.list.remove',
                     'instance_id': instance._serialized['id'],
                 },
             )

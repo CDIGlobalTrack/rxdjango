@@ -8,7 +8,6 @@ from asgiref.sync import sync_to_async, async_to_sync
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
-from .redis import connect as redis_connect
 from .state_loader import StateLoader
 from .actions import execute_action
 from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
@@ -89,7 +88,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self.connect_anchor(anchor_id)
 
         if self.channel.meta.auto_update:
-            self.channel_layer.group_add(
+            await self.channel_layer.group_add(
                 self.channel._anchor_events_channel,
                 self.channel_name,
             )
@@ -103,7 +102,7 @@ class StateConsumer(AsyncWebsocketConsumer):
     async def instances_list_add(self, event):
         instance_id = event['instance_id']
         if await self.channel.is_visible(instance_id):
-            await self.channel.add_instance(instance_id)
+            await self.channel.add_instance(instance_id, at_beginning=True)
 
     async def instances_list_remove(self, event):
         instance_id = event['instance_id']
@@ -206,3 +205,10 @@ class StateConsumer(AsyncWebsocketConsumer):
         text_data = json_dumps(data)
         close = error != None
         await self.send(text_data=text_data, close=close)
+
+    async def prepend_anchor_id(self, anchor_id):
+        data = {
+            'prependAnchor': anchor_id,
+        }
+        text_data = json_dumps(data)
+        await self.send(text_data=text_data)

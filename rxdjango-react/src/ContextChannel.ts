@@ -41,12 +41,21 @@ abstract class ContextChannel<T> {
       this.receiveActionResponse(response);
     }
 
+    ws.onAnchorPrepend = (anchorId) => {
+      this.prependAnchor(anchorId);
+    }
+
     this.ws = ws;
   }
 
   private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
     this.notify();
+  }
+
+  private prependAnchor(anchorId: number) {
+      this.builder!.prependAnchorId(anchorId);
+      this.notify()
   }
 
   private notify() {
