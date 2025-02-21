@@ -1,6 +1,6 @@
 {
   "name": "@rxdjango/react",
-  "version": "0.0.20",
+  "version": "0.0.22",
   "description": "React adapter for RxDjango",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
