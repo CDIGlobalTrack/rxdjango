@@ -24,9 +24,11 @@ def action(method):
 def list_actions(channel):
     """List all decorated methods in this django deployment"""
     for method in channel.__dict__.values():
-        if method in __actions:
-            yield method
-
+        try:
+            if method in __actions:
+                yield method
+        except TypeError:
+            pass
 
 async def execute_action(channel, method_name, params):
     method = getattr(channel, method_name, None)
