@@ -182,7 +182,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     import_types[app].append(anchor.__class__)
 
-    if getattr(anchor, 'many', False):
+    if context_channel_class.many:
         state_type += '[]'
 
     # Base of the class
