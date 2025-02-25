@@ -210,12 +210,13 @@ class ContextChannel(metaclass=ContextChannelMeta):
         """Called when user disconnects"""
         pass
 
-    async def clear_cache(self):
-        redis = RedisStateSession(self)
-        mongo = MongoStateSession(self)
+    @classmethod
+    async def clear_cache(cls, anchor_id):
+        redis = RedisStateSession(cls, anchor_id)
         result = await redis.cooldown()
-        if result:
-            await mongo.clear()
+        if not result:
+            return result
+        await MongoStateSession.clear(cls, anchor_id)
         return result
 
     @classmethod
