@@ -52,7 +52,7 @@ class MongoStateSession:
 
                 del instance['_id']
                 del instance['_anchor_id']
-
+                instance['_operation'] = 'initial_state'
                 instances.append(instance)
 
             if instances:
