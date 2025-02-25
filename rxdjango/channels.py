@@ -1,6 +1,7 @@
 import json
 from collections import deque, namedtuple
 import pymongo
+import channels.layers
 from django.utils import timezone
 from hashlib import md5
 from asgiref.sync import async_to_sync
@@ -9,7 +10,7 @@ from django.conf import settings
 from django.db import models, connection, transaction, ProgrammingError
 from rest_framework import serializers
 
-from .consumers import StateConsumer
+from .consumers import StateConsumer, get_consumer_methods
 from .state_model import StateModel
 from .state_loader import StateLoader
 from .websocket_router import WebsocketRouter
@@ -84,7 +85,7 @@ class ContextChannelMeta(type):
         new_class._signal_handler = SignalHandler(new_class)
         new_class._anchor_model = anchor.Meta.model
         new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
-
+        new_class._consumer_methods = get_consumer_methods(new_class)
         return new_class
 
 
@@ -121,8 +122,17 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self._consumer = None  # will be set by consumer
 
     async def send(self, *args, **kwargs):
+        """A proxy method to self._consumer.send"""
         await self._consumer.send(*args, **kwargs)
-     
+
+    async def group_add(self, group):
+        """Add this consumer to a group in channels"""
+        channel_layer = channels.layers.get_channel_layer()
+        await channel_layer.group_add(
+            group,
+            self._consumer.channel_name,
+        )
+
     async def initialize_anchors(self):
         if self.many:
             qs = await self.list_instances(**self.kwargs)
@@ -131,7 +141,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
             self.anchor_ids = [
                 self.get_instance_id(**self.kwargs)
             ]
-            
+
     @database_sync_to_async
     def _fetch_instance_ids(self, qs):
         self.anchor_ids = [
