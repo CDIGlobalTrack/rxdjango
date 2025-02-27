@@ -8,6 +8,10 @@ from .exceptions import UnknownProperty
 from .related_properties import is_related_property, get_accessor, get_reverse_accessor
 
 class StateModel:
+    """The StateModel is constructed based on a nested serializers.ModelSerializer
+    instance. It introspects the serializer and recursively build a model with all
+    layers of the serializer.
+    """
 
     def __init__(self, state_serializer, many=False, origin=None, instance_property=None, query_property=None, reverse_acessor=None):
         self.nested_serializer = state_serializer
@@ -16,6 +20,7 @@ class StateModel:
         self.reverse_acessor = reverse_acessor
 
         if origin is None:
+            # This is the top-most call, this layer is the anchor
             self.anchor = self
             self.instance_path = []
             self.query_path = []

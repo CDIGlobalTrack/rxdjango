@@ -8,8 +8,6 @@ performance and minimal latency. On the frontend side, it supports
 the React framework now, and adapters to other frontend frameworks can
 be implemented.
 
-A full tutorial can be found at [PUT LINK HERE]
-
 
 .. toctree::
    :maxdepth: 2

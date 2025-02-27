@@ -11,76 +11,109 @@ Backend
 The `rxdjango.channels.ContextChannel` is the core of the RxDjango. Every
 ContextChannel subclass must declare a `Meta` class containing a `state` property
 
-   ```python
-   from rxdjango.channels import ContextChannel
-   from myapp.serializers import MyNestedSerializer
-   
-   class MyContextChannel(ContextChannel):
+.. code-block:: python
 
-       class Meta:
-           state = MyNestedSerializer()
-   ```
+    from rxdjango.channels import ContextChannel
+    from myapp.serializers import MyNestedSerializer
 
-A ContextChannel has to be either a single or a multiple instance channel. To
-declare a channel that has several instances, `many=True` has to be passed to
-the serializer:
+    class MyContextChannel(ContextChannel):
 
-   ```python
-   from rxdjango.channels import ContextChannel
-   from myapp.serializers import MyNestedSerializer
-   
-   class MyContextChannel(ContextChannel):
+        class Meta:
+            state = MyNestedSerializer()
 
-       class Meta:
-           state = MyNestedSerializer()
+A ContextChannel has to be either a single or a multiple instance channel.
+A single instance channel, like the one above, must define the `has_permission`
+static method, to verify if user has permission on an instance:
 
-       @staticmethod
-       def has_permission(user, **kwargs)
+.. code-block:: python
 
-       def get_instance_id(self, **kwargs):
-           # this is optional, by default returns the first kwarg
-	   return kwargs['my_model_id']
-   ```
+    from rxdjango.channels import ContextChannel
+    from myapp.serializers import MyNestedSerializer
 
-If the channel is a single instance channel, it must define `has_permission`
-static method. Channel with many instances must define `list_instances`:
+    class MyContextChannel(ContextChannel):
 
-   ```python
-   from rxdjango.channels import ContextChannel
-   from myapp.serializers import MyNestedSerializer
-   from mayapp.models import MyModel()
-   
-   class MyContextListChannel(ContextChannel):
+        class Meta:
+            state = MyNestedSerializer()
 
-       class Meta:
-           state = MyNestedSerializer(many=True)
+        @staticmethod
+        def has_permission(user, **kwargs)
+
+        def get_instance_id(self, **kwargs):
+            # this is optional, by default returns the first kwarg
+            return kwargs['my_model_id']
+
+To declare a channel that has several instances, `many=True` has to be passed to
+the serializer. In this case, the method `list_instances()` must be implemented,
+and it should return either a queryset or a list of instance ids.
+
+.. code-block:: python
+
+    from rxdjango.channels import ContextChannel
+    from myapp.serializers import MyNestedSerializer
+    from mayapp.models import MyModel()
+
+    class MyContextListChannel(ContextChannel):
+
+        class Meta:
+            state = MyNestedSerializer(many=True)
 
 
-       async def list_instances(self, **kwargs):
-           # Return a queryset of visible objects
-	   # You may need to use @database_sync_to_async
-   ```
+        async def list_instances(self, **kwargs):
+            # Return a queryset of visible objects
+            # You may need to use @database_sync_to_async
 
 In both cases, `**kwargs` comes from the paths registered in asgi.py:
 
-   ```python
-   from myapp.channels import MyContextChannel
-   
-   websocket_urlpatterns = [
-       path('ws/myapp/instance/<str:mymodel_id>/', MyContextChannel.as_asgi()),
-       path('ws/myapp/list', MyContextListChannel.as_asgi()),
-   ]
+.. code-block:: python
 
-   application = ProtocolTypeRouter({
-       "http": app,
-       "websocket": URLRouter(
-           websocket_urlpatterns
-       ),
-   })
-   ```
+    from myapp.channels import MyContextChannel
+
+    websocket_urlpatterns = [
+        path('ws/myapp/instance/<str:mymodel_id>/', MyContextChannel.as_asgi()),
+        path('ws/myapp/list', MyContextListChannel.as_asgi()),
+    ]
+
+    application = ProtocolTypeRouter({
+        "http": app,
+        "websocket": URLRouter(
+            websocket_urlpatterns
+        ),
+    })
 
 Frontend
 --------
+
+Once the channels and routes are created, you can run the `makefrontend` command to
+generate the typescript interfaces and classes at the frontend. Make sure you have
+configured `settings.RX_FRONTEND_DIR` and `settings.RX_WEBSOCKET_URL`.
+
+.. code-block:: bash
+
+    ./manage.py makefrontend
+
+The output of the command will be a diff of the frontend files. If you want to
+automatically build frontend as you develop, you can use the `--makefrontend`
+options for runserver:
+
+.. code-block:: bash
+
+    ./manage.py runserver --makefrontend
+
+Make sure you have installed `@rxdjango/react` dependency in the frontend.
+
+.. code-block:: typescript
+
+    import { useChannelState } from "@rxdjango/react";
+    import { MyNestedType } from "my-rx-frontend-dir/myapp.interfaces";
+    import { MyContextChannel } from "my-rx-frontend-dir/myapp.channels";
+
+    const MyPage = () => {
+      const channel = new MyContextChannel(instanceId, auth.token);
+      const state = useChannelState<MyNestedType>(channel);
+    }
+
+Now the `state` variable will be automatically updated with the state of the instance
+as it is updated in the models.
 
 Actions
 -------
@@ -88,18 +121,18 @@ Actions
 Actions operate on both backend and frontend. With actions, methods can be registered
 on the backend to be called directly from the frontend.
 
-   ```python
-   from rxdjango.actions import action
-   
-   class MyContextListChannel(ContextChannel):
+.. code-block:: python
 
-       ...
+    from rxdjango.actions import action
 
-       @action
-       async def change_instance_state(self, some_var: int) -> bool:
-           # do something, changes in state will automatically be broadcast
-	   return result
-   ```
+    class MyContextListChannel(ContextChannel):
+
+        ...
+
+        @action
+        async def change_instance_state(self, some_var: int) -> bool:
+            # do something, changes in state will automatically be broadcast
+            return result
 
 When creating actions, it's important to use typehints, so the typings can
 automatically be generated for the frontend.
@@ -107,27 +140,58 @@ automatically be generated for the frontend.
 In channels with a list of instances, actions can be used to change the
 instances in the context, for example to create a search:
 
-   ```python
-   from rxdjango.actions import action
+.. code-block:: python
 
-   class MyContextListChannel(ContextChannel):
+    from rxdjango.actions import action
 
-       search_term = None
-       
-       @action
-       async def search(self, term):
-           self.search_term = term
-	   instances = self._list_instances()
-	   self.clear()
-	   for instance in instances:
-	       self.add_instance(instance)
-   ```
+    class MyContextListChannel(ContextChannel):
+
+        search_term = None
+
+        @action
+        async def search(self, term):
+            self.search_term = term
+            instances = self._list_instances()
+            self.clear()
+            for instance in instances:
+                self.add_instance(instance)
 
 `add_instance`, `remove_instance` and `clear` methods can be used to change
-the instances in the context, for list channels. 
+the instances in the context, for list channels.
 
+On the frontend side, a method will be created in the channel class. As you call
+the method in the frontend, it will be asynchronously called in the backend, and
+the results will be returned in the frontend.
 
+.. code-block:: typescript
 
+    const channel = new MyContextChannel(instanceId, auth.token);
 
+    await channel.search(searchTerm);
 
+Consumers
+---------
 
+RxDjango is build on top of `Django Channels <https://channels.readthedocs.io/>`_,
+which implements the concept of consumers. Each `ContextChannel` instance has
+a private instance of `AsyncWebsocketConsumer`, and provides an api to it.
+
+You can implement consumers by using the `rxdjango.consumers.consumer` decorator:
+
+.. code-block:: python
+
+    from rxdjango.channels import ContextChannel
+    from rxdjango.consumers import consumer
+
+    class MyChannel(ContextChannel):
+
+        @consumer('some.event.type')
+        def my_consumer(self, event):
+            # handle event
+
+        async def on_connect(tstamp):
+            # Join a group to receive events
+            await self.group_add('some-group')
+
+For this to work, you will probably want to join some group, as shown above.
+The `group_add` works like in a consumer.
