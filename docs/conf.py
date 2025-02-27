@@ -7,7 +7,7 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'RxDjango'
-copyright = '2025, CDI Inc.'
+copyright = '2025, Control Devices Inc'
 author = 'Luis Fagundes, Isaque Costa, Gabriel Furlan'
 release = '2025'
 
