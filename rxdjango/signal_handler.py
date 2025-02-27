@@ -11,6 +11,11 @@ from .exceptions import RxDjangoBug
 
 
 class SignalHandler:
+    """SignalHandler is responsible for registering signals
+    on all models that are part of the state of a ContextChannel.
+    Each ContextChannel class has a static instance of SignalHandler,
+    created by the metaclass.
+    """
 
     def __init__(self, channel_class):
         self.channel_class = channel_class

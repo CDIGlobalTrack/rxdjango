@@ -1,8 +1,12 @@
 # created by django
 build
+_build
 dist
 rxdjango.egg-info
 node_modules
 rxdjango-react/node_modules
 
 rxdjango-react/dist
+
+*~
+.#*
