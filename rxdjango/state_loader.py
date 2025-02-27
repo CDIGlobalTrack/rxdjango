@@ -78,8 +78,10 @@ class StateLoader:
         while True:
             instances = await next_instances()
             if instances is None:
+                await self.redis.end_write()
                 break
-
+            if len(instances) == 0:
+                continue
             await asyncio.gather(
                 self.mongo.write_instances(instances),
                 self.redis.write_instances(instances),

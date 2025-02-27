@@ -1,4 +1,5 @@
 import json
+from typing import Callable
 from datetime import datetime
 from pytz import utc
 from django.utils import timezone
@@ -78,6 +79,17 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.channel = self.context_channel_class(user, **kwargs)
         await self.channel.initialize_anchors()
         self.channel._consumer = self
+        for method_name in self.channel._consumer_methods.keys():
+            event_type, func = self.channel._consumer_methods[method_name]
+            local_method_name = event_type.replace('.', '_')
+            if getattr(self, local_method_name, None):
+                raise TypeError(f"Can't override method {local_method_name} in consumer,"
+                                " chose another type for this event")
+            # Inject a method in consumer matching the type name with
+            # the decorated method in channel
+            async def method(event):
+                return await func(self.channel, event)
+            setattr(self, local_method_name, method)
         self.user_id = self.user.id
         self.anchor_ids = self.channel.anchor_ids
         self.wsrouter = self.channel._wsrouter
@@ -212,3 +224,39 @@ class StateConsumer(AsyncWebsocketConsumer):
         }
         text_data = json_dumps(data)
         await self.send(text_data=text_data)
+
+
+__CONSUMERS = dict()
+
+
+def consumer(event_type):
+    """Methods in a ContextChannel decorated with @consumer(group) act
+    as Django Channel consumer of that group. You have to manually
+    call group_add(group) to subscribe to the group for it to work.
+    """
+    if not isinstance(event_type, str):
+        raise TypeError("Parameter group @consumer decorator must be a string")
+
+    def decorator(func: Callable):
+        if not callable(func):
+            raise TypeError("@consumer(group) is a decorator and needs to decorate"
+                            " a method in a ContextChannel class")
+        key = '.'.join((func.__module__, func.__qualname__))
+        __CONSUMERS[key] = (event_type, func)
+
+        return func
+
+    return decorator
+
+
+def get_consumer_methods(cls):
+    consumers = __CONSUMERS
+    keys = list(__CONSUMERS.keys())
+    qualname = '.'.join((cls.__module__, cls.__qualname__))
+    consumer_methods = {}
+    for key in keys:
+        if key.startswith(qualname):
+            method_name = key[len(qualname) + 1:]
+            event_type, func = __CONSUMERS.pop(key)
+            consumer_methods[method_name] = (event_type, func)
+    return consumer_methods
