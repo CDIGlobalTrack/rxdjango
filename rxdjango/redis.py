@@ -105,6 +105,7 @@ class RedisStateSession(RedisSession):
         super().__init__(channel, anchor_id)
         self.initial_state = None
         self.tstamp = None
+        self.written_instances = 0
 
     async def load(self):
         """Make an atomic call to redis, check the state and maybe transition
@@ -218,6 +219,7 @@ class RedisStateSession(RedisSession):
 
         return readers
         """
+
         await self.connect()
         end_heating_session = self._conn.register_script(script)
         return await end_heating_session(keys=self.local_keys)
@@ -251,10 +253,10 @@ class RedisStateSession(RedisSession):
 
         return readers
         """
+
         await self.connect()
         rollback_to_cold = self._conn.register_script(script)
         return await rollback_to_cold(keys=self.local_keys)
-
 
     async def write_instances(self, instances):
         """Serialize a list of objects, append them to the instances list, and publish the size to the trigger pub/sub channel.
@@ -264,23 +266,16 @@ class RedisStateSession(RedisSession):
         """
         serialized_instances = [json_dumps(instance) for instance in instances]
 
-        script = """
-        -- Append the serialized instances to instances list
-        for i, obj in ipairs(ARGV) do
-            redis.call("RPUSH", KEYS[3], obj)
-        end
-
-        local instances_size = redis.call("LLEN", KEYS[3]) -- Get the updated size of instances
-        redis.call("PUBLISH", KEYS[5], instances_size) -- Publish the size to trigger channel
-
-        return instances_size
-        """
         await self.connect()
-        write_instances = self._conn.register_script(script)
-        return await write_instances(
-            keys=self.local_keys,
-            args=serialized_instances,
-        )
+        start = self.written_instances
+
+        for instance in instances:
+            serialized = json_dumps(instance)
+            await self._conn.rpush(self.instances, serialized)
+            self.written_instances += 1
+
+        await self._conn.publish(self.instances_trigger, self.written_instances)
+        return self.written_instances
 
     async def end_write(self):
         """Notify all readers with a negative length, or delete instances if no readers"""
@@ -308,7 +303,7 @@ class RedisStateSession(RedisSession):
         When a negative value comes, it raises StopAsyncIteration after yielding the instances.
         """
         await self.connect()
-        pubsub = self._conn.pubsub()
+        pubsub = self._conn.pubsub(ignore_subscribe_messages=True)
         await pubsub.subscribe(self.instances_trigger)
         # Get the initial length of instances and set up a cursor
         try:
@@ -332,10 +327,10 @@ class RedisStateSession(RedisSession):
                 yield [json.loads(serialized) for serialized in new_instances]
 
             if last_length < 0:
-                await self._conn.unsubscribe(self.instances_trigger)
-                raise StopAsyncIteration
+                await pubsub.unsubscribe(self.instances_trigger)
+                return
 
-            message = await pubsub.get_message()
+            message = await pubsub.get_message(timeout=5)
             if message is not None:
                 last_length = int(message['data'])
                 instances_length = abs(last_length)
