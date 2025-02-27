@@ -2,7 +2,7 @@
 .. _caching:
 
 =======
-CACHING
+Caching
 =======
 
 RxDjango comes with a builtin cache system based on MongoDB, and it's
