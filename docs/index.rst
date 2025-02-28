@@ -16,4 +16,5 @@ be implemented.
    quickstart
    architecture-overview
    using-rxdjango
+   context-channel
    caching

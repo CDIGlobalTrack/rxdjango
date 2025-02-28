@@ -36,11 +36,13 @@ make sure `rxdjango` comes before `daphne`, and both come before
 Set the ASGI_APPLICATION variable
 
 .. code-block:: python
+
     ASGI_APPLICATION = 'your_project.asgi.application'
 
 RxDjango depends on Redis for messaging. Configure REDIS_URL.
 
 .. code-block:: python
+
     REDIS_URL = f'redis://127.0.0.1:6379/0'
 
 RxDjango comes with a native cache system using MongoDB.
@@ -78,6 +80,7 @@ subclass.
         class Meta:
             state = MyNestedSerializer()
 
+        @staticmethod
         def has_permission(self, user, instance):
             # check if user has permission on instance
             return True
@@ -105,6 +108,7 @@ your serializer and a MyContextChannel class in the frontend, with
 an interface to access the backend.
 
 .. code-block:: bash
+
     python manage.py makefrontend
 
 Alternatively, you can pass --makefrontend option to runserver command
