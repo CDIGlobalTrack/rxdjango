@@ -149,7 +149,7 @@ instances in the context, for example to create a search:
         search_term = None
 
         @action
-        async def search(self, term):
+        async def search(self, term: str) -> None:
             self.search_term = term
             instances = self._list_instances()
             self.clear()
@@ -176,7 +176,8 @@ RxDjango is build on top of `Django Channels <https://channels.readthedocs.io/>`
 which implements the concept of consumers. Each `ContextChannel` instance has
 a private instance of `AsyncWebsocketConsumer`, and provides an api to it.
 
-You can implement consumers by using the `rxdjango.consumers.consumer` decorator:
+You can implement consumer functionality by using the `rxdjango.consumers.consumer`
+decorator on your `ContextChannel`:
 
 .. code-block:: python
 
@@ -194,4 +195,7 @@ You can implement consumers by using the `rxdjango.consumers.consumer` decorator
             await self.group_add('some-group')
 
 For this to work, you will probably want to join some group, as shown above.
-The `group_add` works like in a consumer.
+The `group_add` works like in a Django Channels consumer.
+
+See `Channels Layers documentation <https://channels.readthedocs.io/en/stable/topics/channel_layers.html>`_
+for information on how to send messages to groups and general consumer functionality.
