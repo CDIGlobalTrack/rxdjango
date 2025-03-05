@@ -23,10 +23,12 @@ export default class PersistentWebSocket {
   public onOpen: () => void = () => {};
   public onClose: (event: CloseEvent) => void = () => {};
   public onAuth: (authStatus: AuthStatus) => void = () => {};
+  public onRuntimeStateChange: (runtimeState: unknown) => void = () => {};
   public onInstances: (instances: TempInstance[]) => void = () => {};
   public onActionResponse: (response: ActionResponse<unknown>) => void = () => {};
   public onAnchorPrepend: (anchorId: number) => void = () => {};
   public onSystem: (message: SystemMessage) => void = () => {};
+  public onConnected: () => void = () => {};
 
   constructor(
     url: string,
@@ -60,6 +62,10 @@ export default class PersistentWebSocket {
     this.ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
 
+      if (message['status_code'] && message['status_code'] == 200) {
+        this.onConnected();
+      }
+
       if (!this.authStatusReceived) {
         this.authStatusReceived = true;
         this.authStatus = message as AuthStatus;
@@ -79,6 +85,11 @@ export default class PersistentWebSocket {
 
       if (message['callId']) {
         this.onActionResponse(message as ActionResponse<unknown>);
+        return;
+      }
+
+      if (message['runtimeVar']) {
+        this.onRuntimeStateChange(message);
         return;
       }
 

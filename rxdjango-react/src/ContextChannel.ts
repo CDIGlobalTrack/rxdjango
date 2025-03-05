@@ -3,10 +3,11 @@ import StateBuilder from './StateBuilder';
 import { NoConnectionListener, TempInstance, Listener, Model } from './ContextChannel.interfaces';
 import { Action, ActionResponse, ActionIndex, CallPromise } from './actions.d';
 
-abstract class ContextChannel<T> {
+abstract class ContextChannel<T, Y=unknown> {
   private ws: PersistentWebsocket | undefined;
   private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
+  private runtimeListeners: Listener<Y>[] = [];
   private noConnectionListeners: NoConnectionListener[] = [];
   private activeCalls: ActionIndex = {};
   private token: string;
@@ -18,6 +19,10 @@ abstract class ContextChannel<T> {
   abstract baseURL: string;
   abstract model: Model;
   abstract many: boolean;
+  abstract runtimeState: Y | undefined | null;
+
+  public connected: boolean = false;
+  public onConnected: () => void = () => {};
 
   constructor(token: string) {
     this.token = token;
@@ -26,7 +31,7 @@ abstract class ContextChannel<T> {
   public init() {
     if (this.builder)
       return;
-    
+
     this.builder = new StateBuilder<T>(this.model, this.anchor, this.many);
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
@@ -39,11 +44,20 @@ abstract class ContextChannel<T> {
 
     ws.onActionResponse = (response) => {
       this.receiveActionResponse(response);
-    }
+    };
+
+    ws.onRuntimeStateChange = (message) => {
+      const msg = message as { runtimeVar: keyof Y; value: unknown };
+      const runtimeVar = msg.runtimeVar;
+      const value = msg.value;
+      this.receiveRuntimeState(runtimeVar, value);
+    };
 
     ws.onAnchorPrepend = (anchorId) => {
       this.prependAnchor(anchorId);
     }
+
+    ws.onConnected = this.onConnected;
 
     this.ws = ws;
   }
@@ -51,6 +65,11 @@ abstract class ContextChannel<T> {
   private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
     this.notify();
+  }
+
+  private receiveRuntimeState(runtimeVar: keyof Y, value: unknown) {
+    this.runtimeState = { ...this.runtimeState, [runtimeVar]: value } as Y;
+    this.notifyRuntimeState();
   }
 
   private prependAnchor(anchorId: number) {
@@ -62,6 +81,12 @@ abstract class ContextChannel<T> {
     const state = this.builder!.state;
     for (const listener of this.listeners) {
       if (state) listener(state as T);
+    }
+  }
+
+  private notifyRuntimeState() {
+    for (const listener of this.runtimeListeners) {
+      if (this.runtimeState) listener(this.runtimeState);
     }
   }
 
@@ -89,6 +114,18 @@ abstract class ContextChannel<T> {
 
     return unsubscribe;
   }
+
+  public subscribeRuntimeState(listener: Listener<Y>): () => void {
+    this.runtimeListeners.push(listener);
+
+    const unsubscribe = () => {
+      const index = this.runtimeListeners.indexOf(listener);
+      if (index !== -1) {
+        this.runtimeListeners.splice(index, 1);
+      }
+    };
+    return unsubscribe;
+  };
 
   protected async callAction<T>(action: string, params: any[]): Promise<T> {
     const callId = this.generateUniqueId();
