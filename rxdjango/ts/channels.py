@@ -189,9 +189,9 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     code = [
         f"export class {name} extends ContextChannel<{state_type}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
-        f"  endpoint: string = '{endpoint}';\n",
-        f"  args: {{ [key: string]: number | string }} = {{}};\n",
-        f"  many = {many};\n",
+        f"  endpoint: string = '{endpoint}';",
+        f"  args: {{ [key: string]: number | string }} = {{}};",
+        f"  many = {many};",
     ]
 
     # Add private properties based on parameters
@@ -200,17 +200,19 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     if getattr(context_channel_class, 'RuntimeState', False):
         runtime_type = f'{context_channel_class.__name__}RuntimeState'
-        code.append(f'  runtimeState: {runtime_type};\n')
+        code.append(f'  runtimeState: {runtime_type} | undefined')
         types = typing.get_type_hints(context_channel_class.RuntimeState)
 
         code = [
-            f"export interface {runtime_type} {{\n"
+            f"export interface {runtime_type} {{"
         ] + [
-            f"  {var}: {TYPEMAP[_type]};\n"
+            f"  {var}: {TYPEMAP[_type]};"
             for var, _type in types.items()
         ] + [
-            "}"
+            "}\n"
         ] + code
+    else:
+        code.append(f'  runtimeState = null;')
 
     code.append(f'  baseURL: string = SOCKET_URL;\n')
 

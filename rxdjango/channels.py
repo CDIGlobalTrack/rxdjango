@@ -1,13 +1,7 @@
 import json
-from collections import deque, namedtuple
-import pymongo
 import channels.layers
-from django.utils import timezone
-from hashlib import md5
-from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from django.conf import settings
-from django.db import models, connection, transaction, ProgrammingError
+from django.db import ProgrammingError
 from rest_framework import serializers
 
 from .consumers import StateConsumer, get_consumer_methods
@@ -102,6 +96,8 @@ class ContextChannel(metaclass=ContextChannelMeta):
     class Meta:
         abstract = True
 
+    RuntimeState = None
+
     @classmethod
     def as_asgi(cls):
         Consumer = type(
@@ -120,6 +116,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.user = user
         self.user_id = user.id
         self._consumer = None  # will be set by consumer
+        self.runtime_state = self.RuntimeState() if self.RuntimeState else None
 
     async def send(self, *args, **kwargs):
         """A proxy method to self._consumer.send"""
@@ -170,6 +167,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
                         instance['_operation'] = 'initial_state'
                     data = json_dumps(instances)
                     await self.send(text_data=data)
+
+    async def set_runtime_var(self, var, value):
+        self.runtime_state[var] = value
+        payload = { 'runtimeVar': var, 'value': value }
+        payload = json.dumps(payload)
+        await self.send(text_data=payload)
 
     @database_sync_to_async
     def serialize_instance(self, instance, tstamp=0):
