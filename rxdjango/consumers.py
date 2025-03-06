@@ -77,8 +77,9 @@ class StateConsumer(AsyncWebsocketConsumer):
         kwargs = self.scope['url_route']['kwargs']
         self.user = user
         self.channel = self.context_channel_class(user, **kwargs)
-        await self.channel.initialize_anchors()
         self.channel._consumer = self
+        await self.send_connection_status(200)
+        await self.channel.initialize_anchors()
         for method_name in self.channel._consumer_methods.keys():
             event_type, func = self.channel._consumer_methods[method_name]
             local_method_name = event_type.replace('.', '_')
@@ -93,8 +94,6 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.user_id = self.user.id
         self.anchor_ids = self.channel.anchor_ids
         self.wsrouter = self.channel._wsrouter
-
-        await self.send_connection_status(200)
 
         for anchor_id in self.anchor_ids:
             await self.connect_anchor(anchor_id)

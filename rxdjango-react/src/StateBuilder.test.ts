@@ -193,7 +193,6 @@ describe('StateBuilder', () => {
     const user = projectTasks[0].user;
 
     stateBuilder.update([userInstance]);
-
     expect(project).not.toBe(state);
     expect(state!.tasks).not.toBe(projectTasks);
     expect(state!.tasks[0].user).not.toBe(user);
@@ -208,7 +207,6 @@ describe('StateBuilder', () => {
       customer: 1,
     };
     const state: ProjectType = stateBuilder.state! as ProjectType;
-
     stateBuilder.update([projectInstance]);
     expect(state?.customer._loaded).toEqual(false);
     expect(state?.customer.id).toEqual(1);
@@ -226,7 +224,6 @@ describe('StateBuilder', () => {
     };
     stateBuilder.update([projectInstance]);
     const state: ProjectType = stateBuilder.state! as ProjectType;
-
     const customer = state?.customer
     stateBuilder.update([customerInstance]);
     expect(state?.customer._loaded).toEqual(true);
@@ -249,7 +246,6 @@ describe('StateBuilder', () => {
       taskName: 'Task #3',
     }])
     const state: ProjectType = stateBuilder.state! as ProjectType;
-
     const customer = state.customer!;
     expect(state.tasks[2]).toBe(customer.tasks[0]);
   });
@@ -268,10 +264,8 @@ describe('StateBuilder', () => {
       customerName: 'Customer #1',
       tasks: [3, 4, 5],
     }])
-
     const state: ProjectType = stateBuilder.state! as ProjectType;
     const customer = state.customer!;
     expect(state.tasks[2]).toBe(customer.tasks[0]);
   });
-
 });
