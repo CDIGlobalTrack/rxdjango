@@ -46,11 +46,11 @@ the context and fetch data.
 
 There is also the `rxdjango.consumers.consumer` decorator, which allows channels to
 act as consumers, so that they can change the frontend state based on events on the
-backend. (This is in a PR to be merged soon)
+backend.
 
 Finally, ContextChannel provides the `RuntimeState` interface, which allows arbitrary
 runtime variables to be defined and set at the backend, to be automatically updated
-in the frontend. (This is being implemented and will be available soon)
+in the frontend.
 
 The final experience for the developer is a seamless integration between backend and
 frontend, in which the need for Django views and React reducers is eliminated. The
