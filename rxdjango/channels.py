@@ -117,6 +117,8 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.user_id = user.id
         self._consumer = None  # will be set by consumer
         self.runtime_state = self.RuntimeState() if self.RuntimeState else None
+        self.anchor_ids = []
+        self.anchor_index = set()
 
     async def send(self, *args, **kwargs):
         """A proxy method to self._consumer.send"""
@@ -133,17 +135,18 @@ class ContextChannel(metaclass=ContextChannelMeta):
     async def initialize_anchors(self):
         if self.many:
             qs = await self.list_instances(**self.kwargs)
-            await self._fetch_instance_ids(qs)
+            self.anchor_ids = await self._fetch_instance_ids(qs)
         else:
             self.anchor_ids = [
                 self.get_instance_id(**self.kwargs)
             ]
+        self.anchor_index = set(self.anchor_ids)
 
     @database_sync_to_async
     def _fetch_instance_ids(self, qs):
-        self.anchor_ids = [
-                instance['id'] for instance in qs.values('id')
-            ]
+        return [
+            instance['id'] for instance in qs.values('id')
+        ]
 
     def get_instance_id(self, **kwargs):
         """Subclass may implement get_anchor_id, based on url parameters,
@@ -156,9 +159,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
         raise NotImplemented
 
     async def add_instance(self, instance_id, at_beginning=False):
+        if instance_id in self.anchor_index:
+            return
         if at_beginning:
             await self._consumer.prepend_anchor_id(instance_id)
         self.anchor_ids.append(instance_id)
+        self.anchor_index.add(instance_id)
         await self._consumer.connect_anchor(instance_id)
         async with StateLoader(self, instance_id) as loader:
             async for instances in loader.list_instances():
@@ -198,11 +204,13 @@ class ContextChannel(metaclass=ContextChannelMeta):
         await self.send(text_data=json.dumps([serialized], default=str))
         if remove:
             self.anchor_ids.remove(instance_id)
+            self.anchor_index.remove(instance_id)
 
     async def clear(self):
         for instance_id in self.anchor_ids:
             await self._remove_instance(instance_id, False)
         self.anchor_ids = []
+        self.anchor_index = set()
 
     @staticmethod
     def has_permission(user, **kwargs):
