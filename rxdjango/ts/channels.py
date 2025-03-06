@@ -185,9 +185,16 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     if context_channel_class.many:
         state_type += '[]'
 
+    if getattr(context_channel_class, 'RuntimeState', False):
+        runtime_type = f'{context_channel_class.__name__}RuntimeState'
+        types = f'{state_type}, {runtime_type}'
+    else:
+        runtime_type = None
+        types = state_type
+
     # Base of the class
     code = [
-        f"export class {name} extends ContextChannel<{state_type}> {{\n",
+        f"export class {name} extends ContextChannel<{types}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';",
         f"  args: {{ [key: string]: number | string }} = {{}};",
@@ -198,8 +205,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     # for key, ts_type in parameters.items():
     #     code.append(f"  {key}: {ts_type};")
 
-    if getattr(context_channel_class, 'RuntimeState', False):
-        runtime_type = f'{context_channel_class.__name__}RuntimeState'
+    if runtime_type:
         code.append(f'  runtimeState: {runtime_type} | undefined')
         types = typing.get_type_hints(context_channel_class.RuntimeState)
 
