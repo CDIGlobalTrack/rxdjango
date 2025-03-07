@@ -23,6 +23,7 @@ abstract class ContextChannel<T, Y=unknown> {
 
   public connected: boolean = false;
   public onConnected: () => void = () => {};
+  public onEmpty: () => void = () => {};
 
   constructor(token: string) {
     this.token = token;
@@ -57,7 +58,13 @@ abstract class ContextChannel<T, Y=unknown> {
       this.prependAnchor(anchorId);
     }
 
-    ws.onConnected = this.onConnected;
+    ws.onInitialAnchors = (anchorIds) => {
+      this.builder!.setAnchors(anchorIds);
+      this.notify();
+    }
+
+    ws.onConnected = this.onConnected
+    ws.onEmpty = this.onEmpty
 
     this.ws = ws;
   }

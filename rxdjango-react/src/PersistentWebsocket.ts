@@ -24,11 +24,13 @@ export default class PersistentWebSocket {
   public onClose: (event: CloseEvent) => void = () => {};
   public onAuth: (authStatus: AuthStatus) => void = () => {};
   public onRuntimeStateChange: (runtimeState: unknown) => void = () => {};
+  public onInitialAnchors: (anchors: number[]) => void = () => {};
   public onInstances: (instances: TempInstance[]) => void = () => {};
   public onActionResponse: (response: ActionResponse<unknown>) => void = () => {};
   public onAnchorPrepend: (anchorId: number) => void = () => {};
   public onSystem: (message: SystemMessage) => void = () => {};
   public onConnected: () => void = () => {};
+  public onEmpty: () => void = () => {};
 
   constructor(
     url: string,
@@ -93,19 +95,30 @@ export default class PersistentWebSocket {
         return;
       }
 
+      if (message['initialAnchors']) {
+        if (message['initialAnchors'].length > 0) {
+          this.onInitialAnchors(message['initialAnchors'] as number[]);
+        } else {
+          this.onEmpty();
+        }
+        return;
+      }
+
       if (message['prependAnchor']) {
         this.onAnchorPrepend(message['prependAnchor'] as number);
+        return;
       }
-      
+
       if (message['source'] == 'system') {
         this.onSystem(message as SystemMessage);
+        return;
       }
 
       if (message['source'] == 'maintenance') {
         this.disconnect();
         this.persistentReconnect();
+        return;
       }
-
     };
 
     this.ws.onclose = (event) => {

@@ -88,8 +88,20 @@ export default class StateBuilder<T> {
     this.anchorIds = [instance.id];
   }
 
-  private setAnchors(instanceIds: number[]) {
+  public setAnchors(instanceIds: number[]) {
+    debugger;
     this.anchorIds = instanceIds;
+    this.anchorIds.forEach((anchorId) => {
+      this.anchorIndex[anchorId] = true;
+      const key = `${this.anchor}:${anchorId}`;
+      this.index[key] ||= {
+        id: anchorId,
+        _instance_type: this.anchor,
+        _operation: 'initial_state'
+        , _tstamp: 0,
+        _loaded: false,
+      } as UnloadedInstance;
+    });
   }
 
   // Handles data for one instance as received from the backend
@@ -118,7 +130,7 @@ export default class StateBuilder<T> {
       this.anchorIds = this.anchorIds?.filter(id => id !== instance.id);
       delete this.anchorIndex[instance.id];
     }
-    
+
     const _instance = instance as unknown as { [key: string]: any };
 
     // The key in the index for this instance

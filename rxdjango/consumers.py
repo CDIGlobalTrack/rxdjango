@@ -106,6 +106,10 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         await self.channel.on_connect(tstamp)
 
+        await self.send(text_data=json.dumps({
+            'initialAnchors': self.anchor_ids,
+        }))
+
         for anchor_id in self.anchor_ids:
             await self._load_state(anchor_id)
 
