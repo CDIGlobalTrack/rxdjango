@@ -1,12 +1,13 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { NoConnectionListener, TempInstance, Listener, Model } from './ContextChannel.interfaces';
+import { NoConnectionListener, TempInstance, Listener, Model, InstanceListener, InstanceType } from './ContextChannel.interfaces';
 import { Action, ActionResponse, ActionIndex, CallPromise } from './actions.d';
 
 abstract class ContextChannel<T, Y=unknown> {
   private ws: PersistentWebsocket | undefined;
   private builder: StateBuilder<T> | undefined;
   private listeners: Listener<T>[] = [];
+  private instance_listeners: { [key: string]: InstanceListener } = {};
   private runtimeListeners: Listener<Y>[] = [];
   private noConnectionListeners: NoConnectionListener[] = [];
   private activeCalls: ActionIndex = {};
@@ -71,6 +72,11 @@ abstract class ContextChannel<T, Y=unknown> {
 
   private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
+
+    for (const instance of instances) {
+      this.notifyInstance(instance);
+    }
+
     this.notify();
   }
 
@@ -82,6 +88,14 @@ abstract class ContextChannel<T, Y=unknown> {
   private prependAnchor(anchorId: number) {
       this.builder!.prependAnchorId(anchorId);
       this.notify()
+  }
+
+  private notifyInstance(instance: InstanceType) {
+    const key = `${instance._instance_type}:${instance.id}`;
+    const listener = this.instance_listeners[key];
+    if (listener) {
+      listener(instance);
+    }
   }
 
   private notify() {
@@ -122,6 +136,25 @@ abstract class ContextChannel<T, Y=unknown> {
     return unsubscribe;
   }
 
+  public subscribeInstance(listener: InstanceListener, instance_id: number, instance_type: string) {
+    const key = `${instance_type}:${instance_id}`;
+    this.instance_listeners[key] = listener;
+    const unsubscribe = () => {
+      delete this.instance_listeners[key];
+    };
+
+    if (!this.builder) return unsubscribe;
+
+    try {
+      const instance = this.builder!.getInstance(key);
+      this.notifyInstance(instance);
+    } catch (e) {
+      return unsubscribe;
+    }
+
+    return unsubscribe;
+  }
+
   public subscribeRuntimeState(listener: Listener<Y>): () => void {
     this.runtimeListeners.push(listener);
 
@@ -132,7 +165,7 @@ abstract class ContextChannel<T, Y=unknown> {
       }
     };
     return unsubscribe;
-  };
+  }
 
   protected async callAction<T>(action: string, params: any[]): Promise<T> {
     const callId = this.generateUniqueId();

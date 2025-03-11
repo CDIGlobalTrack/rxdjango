@@ -1,4 +1,5 @@
 export type Listener<T> = (state: T) => void;
+export type InstanceListener = (instance: InstanceType) => void;
 export type NoConnectionListener = (no_connection_since: Date | undefined) => void;
 
 // The model for a channel contains which fields for each instance type are references
