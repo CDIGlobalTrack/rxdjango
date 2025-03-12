@@ -86,8 +86,8 @@ abstract class ContextChannel<T, Y=unknown> {
   }
 
   private prependAnchor(anchorId: number) {
-      this.builder!.prependAnchorId(anchorId);
-      this.notify()
+    this.builder!.prependAnchorId(anchorId);
+    this.notify()
   }
 
   private notifyInstance(instance: InstanceType) {
@@ -153,6 +153,15 @@ abstract class ContextChannel<T, Y=unknown> {
     }
 
     return unsubscribe;
+  }
+
+  public getInstance<Y = InstanceType>(instance_type: string, instance_id: number): Y | null {
+    const key = `${instance_type}:${instance_id}`;
+    try {
+      return this.builder!.getInstance(key) as Y;
+    } catch (err) {
+      return null;
+    }
   }
 
   public subscribeRuntimeState(listener: Listener<Y>): () => void {
