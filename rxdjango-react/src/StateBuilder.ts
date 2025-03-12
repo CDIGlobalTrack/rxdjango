@@ -80,6 +80,14 @@ export default class StateBuilder<T> {
     }
   }
 
+  public getInstance(key: string) {
+    if (!this.index[key]) {
+      throw new Error(`Instance ${key} not found`);
+    }
+
+    return this.index[key];
+  }
+
   private setAnchor(instance: TempInstance) {
     if (instance._instance_type !== this.anchor) {
       throw new Error(`Expected _instance_type to be ${this.anchor}, not ${instance._instance_type}`);
@@ -89,7 +97,6 @@ export default class StateBuilder<T> {
   }
 
   public setAnchors(instanceIds: number[]) {
-    debugger;
     this.anchorIds = instanceIds;
     this.anchorIds.forEach((anchorId) => {
       this.anchorIndex[anchorId] = true;
