@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import ContextChannel from './ContextChannel';
 import { InstanceType } from './ContextChannel.interfaces';
 
-export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T>) => {
+export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T> | undefined) => {
   const [state, setReactState] = useState<T>();
   const [runtimeState, setRuntimeState] = useState<Y>();
   const [connected, setConnected] = useState<boolean>(false);
@@ -10,13 +10,15 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T>) => {
   const [noConnectionSince, setNoConnectionSince] = useState<Date>();
 
   useEffect(() => {
+    if (!channel) return;
+    
     channel.onConnected = () => {
       setConnected(true);
     };
 
     channel.onEmpty = () => {
       setEmpty(true);
-    }
+    };
 
     const unsubscribe = channel.subscribe(setReactState, setNoConnectionSince);
     const runtimeUnsubscribe = channel.runtimeState === null ? null : channel.subscribeRuntimeState((rs) => setRuntimeState(rs as Y));
@@ -24,9 +26,10 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T>) => {
     return () => {
       unsubscribe();
       if (runtimeUnsubscribe) runtimeUnsubscribe();
-    }
+    };
   }, [channel]);
 
+  if (!channel) return { state: undefined, connected: false, no_connection_since: undefined, runtimeState: undefined, empty: false };
   return { state, connected, no_connection_since: noConnectionSince, runtimeState, empty };
 };
 
@@ -42,5 +45,6 @@ export const useChannelInstance = <T, Y>(channel: ContextChannel<T> | undefined,
     }
   }, [channel, instance_id, instance_type]);
 
+  if (!channel || !instance_id) return null;
   return instance;
 };
