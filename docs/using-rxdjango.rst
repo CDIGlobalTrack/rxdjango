@@ -43,8 +43,8 @@ static method, to verify if user has permission on an instance:
             return kwargs['my_model_id']
 
 To declare a channel that has several instances, `many=True` has to be passed to
-the serializer. In this case, the method `list_instances()` must be implemented,
-and it should return either a queryset or a list of instance ids.
+the Meta.state serializer. In this case, the method `list_instances()` must be
+implemented, and it should return either a queryset or a list of instance ids.
 
 .. code-block:: python
 
@@ -56,7 +56,6 @@ and it should return either a queryset or a list of instance ids.
 
         class Meta:
             state = MyNestedSerializer(many=True)
-
 
         async def list_instances(self, **kwargs):
             # Return a queryset of visible objects
@@ -100,6 +99,7 @@ options for runserver:
     ./manage.py runserver --makefrontend
 
 Make sure you have installed `@rxdjango/react` dependency in the frontend.
+Below is an example on how to use the state in the frontend.
 
 .. code-block:: typescript
 
@@ -109,7 +109,7 @@ Make sure you have installed `@rxdjango/react` dependency in the frontend.
 
     const MyPage = () => {
       const channel = new MyContextChannel(instanceId, auth.token);
-      const state = useChannelState<MyNestedType>(channel);
+      const { state } = useChannelState<MyNestedType>(channel);
     }
 
 Now the `state` variable will be automatically updated with the state of the instance
@@ -120,6 +120,8 @@ Actions
 
 Actions operate on both backend and frontend. With actions, methods can be registered
 on the backend to be called directly from the frontend.
+
+On the backend side:
 
 .. code-block:: python
 
@@ -159,9 +161,9 @@ instances in the context, for example to create a search:
 `add_instance`, `remove_instance` and `clear` methods can be used to change
 the instances in the context, for list channels.
 
-On the frontend side, a method will be created in the channel class. As you call
-the method in the frontend, it will be asynchronously called in the backend, and
-the results will be returned in the frontend.
+On the frontend side, a method will be created in the channel class. When the
+method is called from the frontend, it will be asynchronously called in the
+backend, and the results will be returned in the frontend.
 
 .. code-block:: typescript
 
@@ -199,3 +201,57 @@ The `group_add` works like in a Django Channels consumer.
 
 See `Channels Layers documentation <https://channels.readthedocs.io/en/stable/topics/channel_layers.html>`_
 for information on how to send messages to groups and general consumer functionality.
+
+Runtime State
+-------------
+
+A `ContextChannel` can have a runtime state, which is a dictionary in the python
+class that is automatically relayed to the frontend, and is only persistent during
+one websocket connection.
+
+To properly generate a Typescript interface for the runtime state, it is declared
+as a TypedDict in the backend class:
+
+.. code-block:: python
+
+    from typing import TypedDict
+    from rxdjango.channels import ContextChannel
+
+    class MyChannel(ContextChannel):
+
+        class RuntimeState(TypedDict):
+            some_number_var: int
+            some_bool_var: bool
+
+The runtime state is accessible as `self.runtime_state` in the ContextChannel.
+To change the runtime state, use the `set_runtime_var`. In the example below,
+a consumer is used to change a runtime variable.
+
+.. code-block:: python
+
+    from typing import TypedDict
+    from rxdjango.channels import ContextChannel
+
+    class MyChannel(ContextChannel):
+
+        class RuntimeState(TypedDict):
+            notifications: int
+
+        @consumer('new.notification')
+        def relay_notification(self, event):
+            notifications = self.runtime_state['notifications']
+            self.set_runtime_var('notifications', notifications + 1)
+
+On the frontend side, `runtimeState` is one more key returned by
+`useChannelState`:
+
+.. code-block:: typescript
+
+    import { useChannelState } from "@rxdjango/react";
+    import { MyNestedType } from "my-rx-frontend-dir/myapp.interfaces";
+    import { MyContextChannel, MyContextChannelRuntimeState } from "my-rx-frontend-dir/myapp.channels";
+
+    const MyPage = () => {
+      const channel = new MyContextChannel(instanceId, auth.token);
+      const { state, runtimeState } = useChannelState<MyNestedType, MyContextChannelRuntimeState>(channel);
+    }
