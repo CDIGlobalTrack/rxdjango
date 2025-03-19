@@ -6,21 +6,18 @@ The ContextChannel class
 ========================
 
 The `rxdjango.channels.ContextChannel` is the core of the RxDjango. Every
-ContextChannel subclass must declare a `Meta` class containing a `state` property
+ContextChannel subclass must declare a `Meta` class containing a `state` property,
+which must be an instance of a `serializers.ModelSerializer` subclass.
 
-.. code-block:: python
+Each ContextChannel is either a single instance channel, or a multiple instance
+channel. This is defined by the parameter `many` in the state.
 
-   from rxdjango.channels import ContextChannel
-   from myapp.serializers import MyNestedSerializer
+Single instance channels
+========================
 
-   class MyContextChannel(ContextChannel):
-
-       class Meta:
-           state = MyNestedSerializer()
-
-A ContextChannel has to be either a single or a multiple instance channel. To
-declare a channel that has several instances, `many=True` has to be passed to
-the serializer:
+In single instance channels, the state relayed to the frontend
+will be a dictionary. Single instance channels should implement
+the static method `has_permission`:
 
 .. code-block:: python
 
@@ -33,89 +30,135 @@ the serializer:
            state = MyNestedSerializer()
 
        @staticmethod
-       def has_permission(user, **kwargs)
+       def has_permission(user, instance_id):
+           # Check permission
 
-       def get_instance_id(self, **kwargs):
-           # this is optional, by default returns the first kwarg
-	   return kwargs['my_model_id']
+Multiple instance channels
+==========================
 
-If the channel is a single instance channel, it must define `has_permission`
-static method. Channel with many instances must define `list_instances`:
+In multiple instances channels, the state relayed to the frontend
+will be a list of dictionaries. Multiple instance channels must
+implement the `list_instances` method, which should return
+a queryset.
 
 .. code-block:: python
 
    from rxdjango.channels import ContextChannel
    from myapp.serializers import MyNestedSerializer
-   from mayapp.models import MyModel()
 
-   class MyContextListChannel(ContextChannel):
+   class MyContextChannel(ContextChannel):
 
        class Meta:
            state = MyNestedSerializer(many=True)
 
+       def list_instances(self):
+           # Filter objects user can see, hypothetically
+           return MyModel.objects.filter(user=self.user)
 
-       async def list_instances(self, **kwargs):
-           # Return a queryset of visible objects
-	   # You may need to use @database_sync_to_async
+Meta class
+==========
 
-In both cases, `**kwargs` comes from the paths registered in asgi.py:
+state
+-----
 
-.. code-block:: python
+The state property must be set to a `serializers.ModelSerializer
+<https://www.django-rest-framework.org/api-guide/serializers/#modelserializer>`_
+instance. If `many=True` is passed to the serializer, this channel will be
+a **multiple instances channel**, otherwise, it will be a **single instance channel**.
+This affects which methods will be called
 
-   from myapp.channels import MyContextChannel
+auto_update
+-----------
 
-   websocket_urlpatterns = [
-       path('ws/myapp/instance/<str:mymodel_id>/', MyContextChannel.as_asgi()),
-       path('ws/myapp/list', MyContextListChannel.as_asgi()),
-   ]
+On multiple instances channels, setting `auto_update` to `True` will
+automatically add new instances to this channel when they are created.
 
-   application = ProtocolTypeRouter({
-       "http": app,
-       "websocket": URLRouter(
-           websocket_urlpatterns
-       ),
-   })
+The method `is_visible` will be called to check if the newly created instance
+should be added or not. Instances are added to the beginning of the state list.
 
-Actions
--------
+Attention: If each connected client creates instances often, this has performance
+of O(N²), as each instance will be checked by each connected client.
 
-By the use of actions, methods can be registered to be called directly from
-the frontend.
+RuntimeState class
+==================
 
-.. code-block:: python
+A class named `RuntimeState`, inheriting `typing.TypedDict`, may be declared
+inside the ContextChannel subclass. It's a flat dictionary, accessible through
+`self.runtime_state`. Its values can be changed using `set_runtime_var`.
 
-   from rxdjango.actions import action
+Methods
+=======
 
-   class MyContextListChannel(ContextChannel):
+has_permission
+--------------
 
-       ...
+This static method will be called after user has been authenticated
+and before sending the state to the frontend.
 
-       @action
-       async def change_instance_state(self, some_var: int) -> bool:
-           # do something, changes in state will automatically be broadcast
-	   return result
+The first parameter passed to `has_permission` is the user instance.
+Other parameters will be `**kwargs` coming from the url route for
+this channel.
 
-When creating actions, it's important to use typehints, so the typings can
-automatically be generated for the frontend.
+Returns True by default.
 
-In channels with a list of instances, actions can be used to change the
-instances in the context, for example to create a search:
+get_instance_id
+---------------
 
-.. code-block:: python
+This method is called in single instance channels, after user has been
+authenticated and permission checked. It receives `**kwargs` coming from
+the url route for this channel.
 
-   from rxdjango.actions import action
+By default, it returns the first argument, so it will work if you have
+the id as parameter, which is the most common case.
 
-   class MyContextListChannel(ContextChannel):
+list_instances
+--------------
 
-       search_term = None
+This method is called in multiple instance channels, after user has been
+authenticated and permission checked.
 
-       @action
-       async def search(self, term):
-           self.search_term = term
-	   instances = self._list_instances()
-	   self.clear()
-	   for instance in instances:
-	       self.add_instance(instance)
+It should return a queryset (and support for returning a list of ids will
+come soon).
 
-`add_instance`, `remove_instance` and `clear` methods can be used to change
-the instances in the context, for list channels.
+add_instance
+------------
+
+For multiple instances channels, this method adds a new instance to state.
+It should be given the instance id. If the at_beginning parameter is True,
+the instance will be added as the first element of the state.
+
+remove_instance
+---------------
+
+For multiple instances channels, this method removes an instance from the state.
+
+clear
+-----
+
+For multiple instances channels, this method removes all instances from the state.
+
+is_visible
+----------
+
+If `Meta.auto_updated` is set to True, this method is called for each new instance
+of the state model created. If it returns True, the instance will be automatically
+added at the beginning of the list.
+
+on_connect
+----------
+
+This method is called after user has been authenticated.
+
+It receives the tstamp of the last update this client had, in case this is a reconnection,
+but on client side this is not implemented yet, so tstamp is always None for now.
+
+on_disconnect
+-------------
+
+This method is called when client disconnects.
+
+clear_cache
+-----------
+
+This classmethod receives the id of an instance in this channel and clears the cache
+for that instance.

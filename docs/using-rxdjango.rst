@@ -136,8 +136,8 @@ On the backend side:
             # do something, changes in state will automatically be broadcast
             return result
 
-When creating actions, it's important to use typehints, so the typings can
-automatically be generated for the frontend.
+When creating actions, it's important to use typehints, so typescript interfaces
+can automatically be generated for the frontend.
 
 In channels with a list of instances, actions can be used to change the
 instances in the context, for example to create a search:
@@ -159,11 +159,11 @@ instances in the context, for example to create a search:
                 self.add_instance(instance)
 
 `add_instance`, `remove_instance` and `clear` methods can be used to change
-the instances in the context, for list channels.
+the instances in the context, for channels with a list of instances.
 
 On the frontend side, a method will be created in the channel class. When the
 method is called from the frontend, it will be asynchronously called in the
-backend, and the results will be returned in the frontend.
+backend, and the results will be returned to the frontend.
 
 .. code-block:: typescript
 
@@ -176,7 +176,7 @@ Consumers
 
 RxDjango is build on top of `Django Channels <https://channels.readthedocs.io/>`_,
 which implements the concept of consumers. Each `ContextChannel` instance has
-a private instance of `AsyncWebsocketConsumer`, and provides an api to it.
+a private instance of `AsyncWebsocketConsumer`, and provides an interface to it.
 
 You can implement consumer functionality by using the `rxdjango.consumers.consumer`
 decorator on your `ContextChannel`:
@@ -206,11 +206,11 @@ Runtime State
 -------------
 
 A `ContextChannel` can have a runtime state, which is a dictionary in the python
-class that is automatically relayed to the frontend, and is only persistent during
-one websocket connection.
+class that is automatically relayed to the frontend. The runtime state persists
+for one websocket connection.
 
-To properly generate a Typescript interface for the runtime state, it is declared
-as a TypedDict in the backend class:
+Declare the RuntimeState class, extending TypedDict, to create a runtime state.
+The TypedDict is required so that proper typescript interfaces can be generated:
 
 .. code-block:: python
 
@@ -243,7 +243,8 @@ a consumer is used to change a runtime variable.
             self.set_runtime_var('notifications', notifications + 1)
 
 On the frontend side, `runtimeState` is one more key returned by
-`useChannelState`:
+`useChannelState`. You also need to import and provide the type of
+the runtime state:
 
 .. code-block:: typescript
 
