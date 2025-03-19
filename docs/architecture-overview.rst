@@ -7,8 +7,8 @@ Architecture Overview
 
 The core of RxDjango is the `rxdjango.channel.ContextChannel` class.
 On initialization, all apps are scanned for a file called `channels.py`,
-and for *ContextChannel* subclass inside those files, and a set of signals
-sigals are registered based on these classes.
+and for *ContextChannel* subclasses inside those files. Then, a set of signals
+are registered based on these classes.
 
 Each *ContextChannel* subclass must contain a *Meta* class declaring
 the *state* property, which must be an instance of `rest_framework.serializers.ModelSerializer`.
@@ -33,19 +33,19 @@ contains typescript interfaces for the nested serializers of each channel.
 The channels file contains a class matching each ContextChannel
 class.
 
-For each connected client, there is an instance on the backend ContextChannel in
-a server, and for each ContextChannel class, there is a matching class in the frontend
-providing an API to access that instance. The frontend class also contains a model of
+For each connected client, there is an instance of the ContextChannel at
+the backend, and for each ContextChannel class, there is a matching class in the frontend
+providing an API to access that instance. The frontend class contains a model of
 the state, so it knows how to rebuild the nested structure from the flat serialized
 layers, making cache very efficient. The state builder in the frontend class simulates
-a reducer in react to trigger and change in context.
+a reducer in react to trigger changes.
 
 By the use of the `rxdjango.actions.action` decorator, developers can register methods
 in the backend class that can be called asynchronously from the frontend class to change
 the context and fetch data.
 
 There is also the `rxdjango.consumers.consumer` decorator, which allows channels to
-act as consumers, so that they can change the frontend state based on events on the
+implement consumer methods, so that they can change the frontend state based on events on the
 backend.
 
 Finally, ContextChannel provides the `RuntimeState` interface, which allows arbitrary
