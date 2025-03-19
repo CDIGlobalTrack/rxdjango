@@ -162,3 +162,15 @@ clear_cache
 
 This classmethod receives the id of an instance in this channel and clears the cache
 for that instance.
+
+runtime_state
+-------------
+
+This property is a dictionary, containing the runtime state of the application, in case the
+`RuntimeState` class has been defined. It should be updated using `set_runtime_var` method,
+so changes are relayed to the frontend.
+
+set_runtime_var
+---------------
+
+This sets one runtime variable, which will be relayed to the frontend and updated there.
