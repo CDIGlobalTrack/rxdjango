@@ -164,7 +164,7 @@ the only supported authentication method for now.
     import { useChannelState } from '@rxdjango/react';
 
     const channel = new MyContextChannel(mymodelId, token);
-    const state = useChannelState(channel);
+    const { state } = useChannelState(channel);
 
 
 That's it! Now:
