@@ -269,4 +269,33 @@ describe('StateBuilder', () => {
     const customer = state.customer!;
     expect(state.tasks[2]).toBe(customer.tasks[0]);
   });
+
+  it('deletes parent reference when object is deleted', () => {
+    const projectInstance: ProjectPayload = {
+      ...header('ProjectSerializer', 1),
+      projectName: 'Project #1',
+      tasks: [1, 2, 3],
+    };
+    const taskInstances: TaskPayload[] = [{
+      ...header('TaskSerializer', 1),
+      taskName: 'Task #1',
+    }, {
+      ...header('TaskSerializer', 2),
+      taskName: 'Task #2',
+    }, {
+      ...header('TaskSerializer', 3),
+      taskName: 'Task #3',
+    }];
+
+    stateBuilder.update([projectInstance]);
+    stateBuilder.update(taskInstances);
+
+    const del = header('TaskSerializer', 2, 'delete');
+    stateBuilder.update([del]);
+    const state = stateBuilder.state! as ProjectType
+    expect(state.tasks.length).toBe(2);
+    expect(state.tasks[0].id).toBe(1);
+    expect(state.tasks[1].id).toBe(3);
+  });
+
 });
