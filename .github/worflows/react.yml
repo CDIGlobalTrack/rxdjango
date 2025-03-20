@@ -1,0 +1,25 @@
+name: "@rxdjango/react Tests"
+on:
+  workflow_call:
+  pull_request:
+    branches: ["main"]
+    # paths:
+    #   - "rxdjango-react/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v3
+
+      - name: Running makefrontend test
+        uses: ./.github/actions/tests/frontend
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code checkout
+        uses: actions/checkout@v3
+
+      - name: Running makefrontend test
+        uses: ./.github/actions/build/frontend
