@@ -136,6 +136,8 @@ export default class StateBuilder<T> {
     ) {
       this.anchorIds = this.anchorIds?.filter(id => id !== instance.id);
       delete this.anchorIndex[instance.id];
+    } else if (instance._operation === 'delete') {
+      return this.deleteInstance(instance._instance_type, instance.id);
     }
 
     const _instance = instance as unknown as { [key: string]: any };
@@ -176,6 +178,23 @@ export default class StateBuilder<T> {
     }
 
     return newInstance as unknown as InstanceType;
+  }
+
+  private deleteInstance(type: string, id: number) {
+    const key = `${type}:${id}`;
+    const refs = this.refs[key];
+
+    for (const ref of refs) {
+      const instance = this.index[ref.referrerKey] as any;
+      const property = ref.property
+      if (!Array.isArray(instance[property])) {
+        instance[property] = null;
+      } else {
+        instance[property] = instance[property].filter((obj: any) => obj.id != id);
+      }
+    }
+    delete this.index[key];
+    delete this.refs[key];
   }
 
   // Recursively propagate a reference change to all instances affected by an updated
