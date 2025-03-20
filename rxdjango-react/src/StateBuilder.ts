@@ -55,7 +55,7 @@ export default class StateBuilder<T> {
 
   // Returns the current state. Every call returns a different reference.
   public get state(): T | T[] | undefined {
-    if (this.anchorIds === undefined)
+    if (!this.many && !this.anchorIds.length)
       return undefined;
 
     const stateKeys = this.anchorIds.map((anchorId: number) => {
