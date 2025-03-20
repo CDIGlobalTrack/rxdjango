@@ -1,5 +1,5 @@
-name: "Run @rxdjango/react Tests"
-description: "Runs @rxdjango/react tests"
+name: "@rxdjango/react build"
+description: "Runs @rxdjango/react build"
 
 inputs:
   VITE_SOCKET_URL:
@@ -14,19 +14,19 @@ runs:
       with:
         node-version: 20
         cache: 'yarn'
-        cache-dependency-path: frontend/yarn.lock
+        cache-dependency-path: rxdjango-react/yarn.lock
 
     - name: Install yarn
       shell: bash
-      working-directory: rxdjango-react
       run: |
-        yarn install --immutable
+        cd rxdjango-react
+        yarn
 
-    - name: Running tests
+    - name: Building @rxdjango/react
       shell: bash
-      working-directory: rxdjango-react
       run: |
-        yarn test
+        cd rxdjango-react
+        yarn build
 
     - uses: actions/upload-artifact@v4
       if: always()

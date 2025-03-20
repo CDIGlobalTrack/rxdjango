@@ -3,8 +3,8 @@ on:
   workflow_call:
   pull_request:
     branches: ["main"]
-    # paths:
-    #   - "rxdjango-react/**"
+    paths:
+      - "rxdjango-react/**"
 
 jobs:
   test:
@@ -13,13 +13,14 @@ jobs:
       - name: Code checkout
         uses: actions/checkout@v3
 
-      - name: Running makefrontend test
-        uses: ./.github/actions/tests/frontend
+      - name: RunTesting @rxdjango/react
+        uses: ./.github/actions/tests/react
+
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Code checkout
         uses: actions/checkout@v3
 
-      - name: Running makefrontend test
-        uses: ./.github/actions/build/frontend
+      - name: Running build @rxdjango/react
+        uses: ./.github/actions/build/react
