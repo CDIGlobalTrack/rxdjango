@@ -35,6 +35,12 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T> | undef
 
 export const useChannelInstance = <T, Y>(channel: ContextChannel<T> | undefined, instance_type: string, instance_id: number | undefined) => {
   const [instance, setInstance] = useState<Y>();
+  const [connected, setConnected] = useState<boolean>(false);
+  
+  useEffect(() => {
+    if (!channel) return;
+    channel.onConnected = () => setConnected(true);
+  }, [channel, instance_type, instance_id]);
 
   useEffect(() => {
     if (!channel || !instance_id) return;
@@ -43,7 +49,7 @@ export const useChannelInstance = <T, Y>(channel: ContextChannel<T> | undefined,
     return () => {
       unsubscribe();
     }
-  }, [channel, instance_id, instance_type]);
+  }, [connected, instance_id]);
 
   if (!channel || !instance_id) return null;
   return instance;

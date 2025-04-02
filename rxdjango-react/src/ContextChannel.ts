@@ -94,7 +94,7 @@ abstract class ContextChannel<T, Y=unknown> {
     const key = `${instance._instance_type}:${instance.id}`;
     const listener = this.instance_listeners[key];
     if (listener) {
-      listener(instance);
+      listener(this.builder!.getInstance(key));
     }
   }
 
