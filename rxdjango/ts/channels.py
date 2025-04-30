@@ -105,6 +105,11 @@ def list_consumer_patterns(app_name, pattern_list=None, router=None):
         pattern_list = []
         router = get_root_routing()
 
+    try:
+        router = router.application
+    except AttributeError:
+        pass
+
     if isinstance(router, ProtocolTypeRouter):
         # Extract the websocket routing
         websocket_router = router.application_mapping.get('websocket', None)
