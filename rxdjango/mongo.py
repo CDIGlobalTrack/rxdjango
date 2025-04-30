@@ -171,9 +171,6 @@ class MongoSignalWriter:
                         # an incomplete serialized object.
                         # TODO emit a warning
                         continue
-                    if isinstance(new_value, list):
-                        old_value = set(old_value)
-                        new_value = set(new_value)
                     if new_value == old_value:
                         del instance[key]
                     else:
