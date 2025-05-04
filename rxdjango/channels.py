@@ -135,7 +135,13 @@ class ContextChannel(metaclass=ContextChannelMeta):
     async def initialize_anchors(self):
         if self.many:
             qs = await self.list_instances(**self.kwargs)
-            self.anchor_ids = await self._fetch_instance_ids(qs)
+            if isinstance(qs, models.query.QuerySet):
+                self.anchor_ids = await self._fetch_instance_ids(qs)
+            elif len(qs) == 0:
+                self.anchor_ids = []
+            else:
+                assert type(qs[0]) is int
+                self.anchor_ids = qs
         else:
             self.anchor_ids = [
                 self.get_instance_id(**self.kwargs)
