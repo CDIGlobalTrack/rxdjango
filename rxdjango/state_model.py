@@ -107,6 +107,7 @@ class StateModel:
 
     def serialize_instance(self, instance, tstamp):
         data = self.flat_serializer(instance).data
+        data['_deleted'] = False
         return self._mark(data, tstamp)
 
     def serialize_delete(self, instance, tstamp):
