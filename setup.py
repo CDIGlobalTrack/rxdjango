@@ -3,7 +3,7 @@ from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
-VERSION = '0.0.36'
+VERSION = '0.0.37'
 
 setup(
     name="rxdjango",
