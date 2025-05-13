@@ -157,7 +157,10 @@ class MongoSignalWriter:
                     upsert=True,
                 )
 
-            if original is None or instance['_operation'] == 'delete':
+            if (original is None
+                or instance['_operation'] == 'delete'
+                or instance.get('_deleted', False) != original.get('_deleted', False)
+                ):
                 deltas.append(instance)
             else:
                 empty = True
