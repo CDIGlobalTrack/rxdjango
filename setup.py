@@ -1,9 +1,14 @@
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
 from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
 VERSION = '0.0.37'
+
+delta_utils = Extension(
+    'rxdjango.utils.delta_utils_c',
+    sources=['rxdjango/utils/delta_utils.c'],
+)
 
 setup(
     name="rxdjango",
@@ -23,5 +28,6 @@ setup(
     ],
     url="https://github.com/CDIGlobalTrack/rxdjango",
     include_package_data=True,
-    python_requires=">=3.10"
+    python_requires=">=3.10",
+    ext_modules=[delta_utils],
 )

@@ -9,7 +9,10 @@ from django.db import ProgrammingError
 from django.conf import settings
 from .redis import get_tstamp, sync_get_tstamp
 from .serialize import json_dumps
-
+try:
+    from rxdjango.utils import delta_utils_c as delta_utils
+except ImportError:
+    from rxdjango.utils import delta_utils
 
 class MongoStateSession:
 
@@ -163,24 +166,7 @@ class MongoSignalWriter:
                 ):
                 deltas.append(instance)
             else:
-                empty = True
-                for key, old_value in original.items():
-                    if key == 'id' or key.startswith('_'):
-                        continue
-                    try:
-                        new_value = instance[key]
-                    except KeyError:
-                        # An exception in a property may have generated
-                        # an incomplete serialized object.
-                        # TODO emit a warning
-                        continue
-                    if new_value == old_value:
-                        del instance[key]
-                    else:
-                        empty = False
-
-                if not empty:
-                    deltas.append(instance)
+                deltas += delta_utils.generate_delta(original, instance)
 
         return deltas
 
