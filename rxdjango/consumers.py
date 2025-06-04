@@ -121,7 +121,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 
     async def instances_list_remove(self, event):
         instance_id = event['instance_id']
-        await self.channel.remove_instance(instance_id, True)
+        await self.channel.remove_instance(instance_id)
 
     async def connect_anchor(self, anchor_id):
         await self.wsrouter.connect(
