@@ -3,7 +3,7 @@ from os import path
 
 cur_dir = path.abspath(path.dirname(__file__))
 
-VERSION = '0.0.38'
+VERSION = '0.0.39'
 
 delta_utils = Extension(
     'rxdjango.utils.delta_utils_c',
