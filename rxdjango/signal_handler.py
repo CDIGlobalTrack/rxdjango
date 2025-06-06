@@ -116,7 +116,13 @@ class SignalHandler:
 
                 self._schedule(serialized, _layer)
 
-                if operation == 'create':
+                if False and operation == 'create':
+                    # This has been disabled because it broadcast peers recursively,
+                    # making simple things like creating a project take a long time
+                    # when there are a lot of projects in a customer.
+                    # The original intention of this block was to move together all
+                    # children and an instance changed parent, we need another way.
+                    # ----
                     # If instance is being created in this channel,
                     # then all related objects need to be scheduled
                     for attribute, child_layer in _layer.children.items():
