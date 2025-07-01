@@ -216,11 +216,22 @@ def serialize_type(serializer):
     for key, value in fields:
         property, type = __process_field(key, value, serializer)
 
+        # Determine if field is auto filled
+        field = getattr(serializer.Meta.model, key, None)
+        if field:
+            try:
+                field = field.field
+                auto = getattr(field, 'auto_now', False) or getattr(field, 'auto_now_add', False)
+            except AttributeError:
+                pass
+        else:
+            auto = False
+
         if key != 'id':
             if value.required:
                 property = property + "?"
 
-            if value.allow_null and not value.read_only:
+            if value.allow_null and not auto:
                 type = type + " | null"
 
         ts_fields.append(f"    {property}: {type};")
