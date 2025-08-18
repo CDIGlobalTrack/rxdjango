@@ -51,7 +51,10 @@ class StateLoader:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        await self.redis.end(exc_type is None)
+        success = exc_type is None
+        await self.redis.end(success)
+        if success:
+            await self.mongo.write_atime(self.tstamp)
 
         if exc_type is not None:
             raise exc

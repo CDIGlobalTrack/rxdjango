@@ -241,6 +241,10 @@ class ContextChannel(metaclass=ContextChannelMeta):
         return result
 
     @classmethod
+    async def list_cached_anchors(cls, query={}):
+        return await MongoStateSession.list_cached_anchors(cls, query)
+
+    @classmethod
     def broadcast_instance(cls, anchor_id, instance, operation='update'):
         cls._signal_handler.broadcast_instance(anchor_id, instance, operation)
 

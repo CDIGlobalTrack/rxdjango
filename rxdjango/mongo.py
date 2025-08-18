@@ -25,7 +25,9 @@ class MongoStateSession:
 
         client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
         self.db = client[settings.MONGO_STATE_DB]
-        self.collection = self.db[channel.__class__.__name__.lower()]
+        name = channel.__class__.__name__.lower()
+        self.collection = self.db[name]
+        self.atime_collection = self.db[f'{name}_atime']
 
     async def tstamp(self):
         if self._tstamp:
@@ -80,13 +82,37 @@ class MongoStateSession:
                 upsert=True,
             )
 
+    async def write_atime(self, atime):
+        """Saves the access time of this anchor in a collection,
+        so that cache control can be implemented"""
+        await self.atime_collection.replace_one(
+            { '_anchor_id': self.anchor_id },
+            {
+                '_anchor_id': self.anchor_id,
+                '_tstamp': self.tstamp,
+            },
+            upsert=True,
+        )
+
     @staticmethod
     async def clear(channel_class, anchor_id):
         client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
         db = client[settings.MONGO_STATE_DB]
-        collection = db[channel_class.__name__.lower()]
+        channel_class.__name__.lower()
+        collection = db[name]
+        atime_collection = db[f'{name}_atime']
         query = {'_anchor_id': anchor_id}
         await collection.delete_many(query)
+        await atime_collection.delete_one(query)
+
+    @staticmethod
+    async def list_cached_anchors(channel_class, query={}):
+        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        db = client[settings.MONGO_STATE_DB]
+        channel_class.__name__.lower()
+        atime_collection = db[f'{name}_atime']
+        async for instance in atime_collection.find(query):
+            yield instance['_anchor_id'], instance['_tstamp']
 
 
 class MongoSignalWriter:
@@ -94,7 +120,9 @@ class MongoSignalWriter:
         # Make a new connection, because this needs to be sync
         client = pymongo.MongoClient(settings.MONGO_URL)
         self.db = client[settings.MONGO_STATE_DB]
-        self.collection = self.db[channel_class.__name__.lower()]
+        name = channel.__class__.__name__.lower()
+        self.collection = self.db[name]
+        self.atime_collection = self.db[f'{name}_atime']
 
     def init_database(self):
         self.collection.drop()
@@ -115,6 +143,14 @@ class MongoSignalWriter:
                 ('_tstamp', pymongo.DESCENDING),
             ],
             name='reconnection_index',
+        )
+
+        self.atime_collection.create_index(
+            [
+                ('_anchor_id', pymongo.ASCENDING),
+                ('_tstamp', pymongo.DESCENDING),
+            ],
+            name='anchor_index',
         )
 
     def write_instances(self, anchor_id, instances):
