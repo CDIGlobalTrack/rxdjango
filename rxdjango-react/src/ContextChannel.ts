@@ -70,6 +70,10 @@ abstract class ContextChannel<T, Y=unknown> {
     this.ws = ws;
   }
 
+  public disconnect() {
+    this.ws?.disconnect();
+  }
+
   private receiveInstances(instances: TempInstance[]) {
     this.builder!.update(instances);
 
