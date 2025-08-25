@@ -1,8 +1,8 @@
 import importlib
 from django.apps import apps, AppConfig
+from django.db.models import Model
 
-
-class ReactFrameworkConfig(AppConfig):
+class RxDjangoConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'rxdjango'
 
