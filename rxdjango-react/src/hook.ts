@@ -7,6 +7,7 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T> | undef
   const [runtimeState, setRuntimeState] = useState<Y>();
   const [connected, setConnected] = useState<boolean>(false);
   const [empty, setEmpty] = useState<boolean>(false);
+  const [error, setError] = useState<Error>();
   const [noConnectionSince, setNoConnectionSince] = useState<Date>();
 
   useEffect(() => {
@@ -14,6 +15,10 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T> | undef
     
     channel.onConnected = () => {
       setConnected(true);
+    };
+
+    channel.onError = (error: Error) => {
+      setError(error);
     };
 
     channel.onEmpty = () => {
@@ -29,8 +34,8 @@ export const useChannelState = <T, Y=unknown>(channel: ContextChannel<T> | undef
     };
   }, [channel]);
 
-  if (!channel) return { state: undefined, connected: false, no_connection_since: undefined, runtimeState: undefined, empty: false };
-  return { state, connected, no_connection_since: noConnectionSince, runtimeState, empty };
+  if (!channel) return { state: undefined, connected: false, no_connection_since: undefined, runtimeState: undefined, empty: false, error: undefined };
+  return { state, connected, no_connection_since: noConnectionSince, runtimeState, empty, error };
 };
 
 export const useChannelInstance = <T, Y>(channel: ContextChannel<T> | undefined, instance_type: string, instance_id: number | undefined) => {
