@@ -5,21 +5,77 @@ from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
                                       post_migrate)
 from django.db import transaction, models, ProgrammingError
+from django.db.models import Model
 from .mongo import MongoSignalWriter
 from .redis import RedisSession, sync_get_tstamp
 from .exceptions import RxDjangoBug
 
 
+class RxMeta():
+    """
+    RxMeta is a lightweight container object used to store
+    per-instance metadata during the lifecycle of Django model
+    signals
+
+    Attributes
+    ----------
+    old_parent : dict
+        Stores the old parent object if the parent relationship
+        that binds the instance to a channel. This allows the
+        signal handler to relay updates for both the new and the
+        old parent.
+
+    An `RxMeta` instance is attached dynamically to models
+    handled by SignalHandler during save lifecycle.
+    """
+    def __init__(self):
+        self.old_parent = {}
+
+
+# Monkey patch django.db.models.Model.save_base() to attach a RxMeta instance
+# before pre_save signal and to cleanup after post_save.
+save_base = Model.save_base
+
+
+def rx_save_base(self, *args, **kwargs):
+    self._rx = RxMeta()
+    result = save_base(self, *args, **kwargs)
+    del self._rx
+    return result
+
+
+Model.save_base = rx_save_base
+
+
 class SignalHandler:
-    """SignalHandler is responsible for registering signals
-    on all models that are part of the state of a ContextChannel.
-    Each ContextChannel class has a static instance of SignalHandler,
-    created by the metaclass.
+    """
+    SignalHandler wires Django model signals to a ContextChannel,
+    ensuring that model changes are consistently propagated to both
+    the persistent cache and connected WebSocket clients.
+
+    Each ContextChannel has a single static SignalHandler instance,
+    created by its metaclass.
+
+    Attributes
+    ----------
+    channel_class : ContextChannel
+        The channel class this handler is bound to.
+    name : str
+        The name of the channel.
+    state_model : StateModel
+        State model tree that defines which Django models participate.
+    wsrouter : WebSocketRouter
+        Dispatcher for sending updates to clients.
+    mongo : MongoSignalWriter
+        Writer that persists instance deltas into MongoDB.
+    relay_map : dict[Model -> list[Callable]]
+        Mapping from model classes to their relay_instance handlers.
+    _setup : bool
+        Guard to prevent multiple signal registrations.
     """
 
     def __init__(self, channel_class):
         self.channel_class = channel_class
-        self.meta = channel_class.meta
         self.name = channel_class.name
         self.state_model = channel_class._state_model
         self.wsrouter = channel_class._wsrouter
@@ -70,10 +126,7 @@ class SignalHandler:
         def prepare_save(sender, instance, **kwargs):
             # Check if this instance has changed parent
             # If so we need to relay the old and new parent
-            if not layer.reverse_acessor:
-                return
-            if kwargs.get('created', False):
-                instance.__parent_updated = True
+            if not layer.reverse_acessor or kwargs.get('created', False):
                 return
             try:
                 current = sender.objects.get(pk=instance.pk or instance.id)
@@ -88,8 +141,7 @@ class SignalHandler:
                 return
             new_parent = getattr(instance, acessor)
             if new_parent != old_parent:
-                instance.__parent_updated = True
-                instance.__old_parent = old_parent
+                instance._rx.old_parent[layer] = old_parent
 
         def _relay_instance(_layer, instance, tstamp, operation, already_relayed=None):
             if not instance:
@@ -104,16 +156,19 @@ class SignalHandler:
                 raise ProgrammingError()
 
             for _instance in instances:
+                key = f'{_layer.instance_type}:{_instance.id}'
+
+                if key in already_relayed:
+                    continue
+
                 if operation == 'delete':
                     serialized = _layer.serialize_delete(_instance, tstamp)
                 else:
                     serialized = _layer.serialize_instance(_instance, tstamp)
-                serialized['_operation'] = operation
-                key = f'{_layer.instance_type}:{_instance.id}'
-                if key in already_relayed:
-                    continue
-                already_relayed.add(key)
 
+                serialized['_operation'] = operation
+
+                already_relayed.add(key)
                 self._schedule(serialized, _layer)
 
                 if False and operation == 'create':
@@ -121,7 +176,7 @@ class SignalHandler:
                     # making simple things like creating a project take a long time
                     # when there are a lot of projects in a customer.
                     # The original intention of this block was to move together all
-                    # children and an instance changed parent, we need another way.
+                    # children when an instance changed parent, we need another way.
                     # ----
                     # If instance is being created in this channel,
                     # then all related objects need to be scheduled
@@ -152,13 +207,17 @@ class SignalHandler:
                 _relay_instance(layer, instance, tstamp, operation)
                 if not layer.origin or not layer.reverse_acessor:
                     return
-                if created or getattr(instance, '__parent_updated', False):
+                try:
+                    old_parent = instance._rx.old_parent.get(layer, None)
+                except AttributeError:
+                    old_parent = None
+                if created or old_parent:
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
                         parent = getattr(parent, reverse_acessor, None)
                     _relay_instance(layer.origin, parent, tstamp, 'update')
-                    old_pa = getattr(instance, '__old_parent', None)
-                    _relay_instance(layer.origin, old_pa, tstamp, 'update')
+                    if old_parent:
+                        _relay_instance(layer.origin, old_parent, tstamp, 'update')
 
         def prepare_deletion(sender, instance, **kwargs):
             """Obtain anchors prior to deletion and store in instance"""
