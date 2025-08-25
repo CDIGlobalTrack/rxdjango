@@ -107,6 +107,10 @@ class SignalHandler:
         if self.channel_class.meta.auto_update:
             self._connect_anchor_events()
 
+    def setup_cleanup(self):
+        for model_layer in self.state_model.models():
+            self._connect_cleanup(model_layer)
+
     def _connect_layer(self, layer):
         """Register signals for models of this layer"""
         def relay_instance_optimistically(sender, instance, **kwargs):
@@ -284,6 +288,29 @@ class SignalHandler:
         )
 
         self.relay_map[layer.model].append(relay_instance)
+
+    def _connect_cleanup(self, layer):
+        """Add signals to garbage collect RxMeta instances that potentially
+        have a lot of serialized data.
+        """
+        def cleanup(sender, instance, **kwargs):
+            instance._rx = None
+
+        uid = '-'.join(['cache', self.name] + layer.instance_path)
+
+        post_save.connect(
+            cleanup,
+            sender=layer.model,
+            dispatch_uid=f'{uid}-save-cleanup',
+            weak=False,
+        )
+
+        post_delete.connect(
+            cleanup,
+            sender=layer.model,
+            dispatch_uid=f'{uid}-delete-cleanup',
+            weak=False,
+        )
 
     def _connect_anchor_events(self):
         """Add signal to broadcast creation and deletion of instances"""
