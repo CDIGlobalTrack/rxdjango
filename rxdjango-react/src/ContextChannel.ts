@@ -25,6 +25,7 @@ abstract class ContextChannel<T, Y=unknown> {
   public connected: boolean = false;
   public onConnected: () => void = () => {};
   public onEmpty: () => void = () => {};
+  public onError: (error: Error) => void = () => {};
 
   constructor(token: string) {
     this.token = token;
@@ -64,14 +65,15 @@ abstract class ContextChannel<T, Y=unknown> {
       this.notify();
     }
 
-    ws.onConnected = this.onConnected
-    ws.onEmpty = this.onEmpty
+    ws.onConnected = this.onConnected;
+    ws.onError = this.onError;
+    ws.onEmpty = this.onEmpty;
 
     this.ws = ws;
   }
 
   public disconnect() {
-    this.ws?.disconnect();
+    this.ws?.disconnect('manual-disconnect');
   }
 
   private receiveInstances(instances: TempInstance[]) {
@@ -133,7 +135,7 @@ abstract class ContextChannel<T, Y=unknown> {
       if (index !== -1) {
         this.listeners.splice(index, 1);
         if (this.listeners.length === 0)
-          this.ws!.disconnect();
+          this.ws!.disconnect('no-subscribers');
       }
     };
 

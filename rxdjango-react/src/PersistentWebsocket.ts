@@ -6,6 +6,13 @@ import {
 import { ActionResponse } from './actions.d';
 
 
+const preventReconnectionReasons = {
+  'authentication-error': 'authentication-error',
+  'protocol-error': 'protocol-error',
+  'no-subscribers': 'no-subscribers',
+  'manual-disconnect': 'manual-disconnect'
+};
+
 export default class PersistentWebSocket {
 
   private url: string;
@@ -17,6 +24,7 @@ export default class PersistentWebSocket {
   private ws: WebSocket | undefined;
   private authStatusReceived: boolean;
   private timer: NodeJS.Timeout | undefined;
+  private reason: keyof typeof preventReconnectionReasons | undefined;
 
   public authStatus: AuthStatus | undefined;
 
@@ -31,6 +39,7 @@ export default class PersistentWebSocket {
   public onSystem: (message: SystemMessage) => void = () => {};
   public onConnected: () => void = () => {};
   public onEmpty: () => void = () => {};
+  public onError: (error: Error) => void = () => {};
 
   constructor(
     url: string,
@@ -74,7 +83,8 @@ export default class PersistentWebSocket {
         this.onAuth(this.authStatus);
         if (this.authStatus.error) {
           console.error("Authentication Error:", this.authStatus.error);
-          this.ws!.close();
+          this.onError(new Error(this.authStatus.error));
+          this.disconnect('authentication-error');
         }
         return;
       }
@@ -115,13 +125,17 @@ export default class PersistentWebSocket {
       }
 
       if (message['source'] == 'maintenance') {
-        this.disconnect();
         this.persistentReconnect();
         return;
       }
     };
 
     this.ws.onclose = (event) => {
+      if (this.reason && preventReconnectionReasons[this.reason]) {
+        this.onClose(event);
+        return;
+      }
+      
       this.persistentReconnect(event.wasClean);
       this.onClose(event);
     };
@@ -145,12 +159,13 @@ export default class PersistentWebSocket {
     }
   }
 
-  disconnect() {
-    if (this.timer) {
+  disconnect(reason?: keyof typeof preventReconnectionReasons) {
+    if (this.timer && reason) {
       clearTimeout(this.timer);
       this.timer = undefined;
-    } else {
-      this.ws?.close();
     }
+
+    this.reason = reason;
+    this.ws?.close();
   }
 }
