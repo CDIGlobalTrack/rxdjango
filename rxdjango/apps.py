@@ -2,13 +2,15 @@ import importlib
 from django.apps import apps, AppConfig
 
 
-class ReactFrameworkConfig(AppConfig):
+class RxDjangoConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'rxdjango'
 
     def ready(self):
         """Discover and register ContextChannel subclasses within Django apps."""
         from . import channels
+
+        handlers = []
 
         for app_config in apps.get_app_configs():
             try:
@@ -24,7 +26,11 @@ class ReactFrameworkConfig(AppConfig):
                        attr.Meta.abstract:
                         continue
                     attr._signal_handler.setup(app_config)
+                    handlers.append(attr._signal_handler)
 
             except ImportError:
                 # channels.py not found in the app, so just continue
                 pass
+
+        for handler in handlers:
+            handler.setup_cleanup()
