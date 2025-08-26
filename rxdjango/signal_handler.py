@@ -184,12 +184,15 @@ class SignalHandler:
                 weak=False,
             )
 
-        pre_save.connect(
-            prepare_save,
-            sender=layer.model,
-            dispatch_uid=f'{uid}-prepare-save',
-            weak=False,
-        )
+        # This pre saving is not good.
+        # Commenting this out to see what breaks
+        #
+        # pre_save.connect(
+        #     prepare_save,
+        #     sender=layer.model,
+        #     dispatch_uid=f'{uid}-prepare-save',
+        #     weak=False,
+        # )
 
         post_save.connect(
             relay_instance,
