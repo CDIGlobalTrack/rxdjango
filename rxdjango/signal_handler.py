@@ -24,28 +24,34 @@ class RxMeta():
         This avoids redundant calls to expensive serialization
         logic during a single transaction.
 
-    parent_updated : bool
-        Flag indicating whether the "parent" relation (as
-        defined by the layer's reverse accessor) has changed
-        since the last save. Used to decide if parent objects
-        should also be relayed to clients.
-
-    old_parent : Model or None
+    old_parent : dict
         Stores the old parent object if the parent relationship
-        changed during the save. This allows the signal handler
-        to relay updates for both the new and the old parent.
+        changed during the save, for each layer. This allows the
+        signal handler to relay updates for both the new and the
+        old parent.
 
-    Usage
-    -----
     An `RxMeta` instance is attached dynamically to models
-    handled by SignalHandler:
+    handled by SignalHandler during save lifecycle:
 
         instance._rx = RxMeta()
     """
     def __init__(self):
         self.serialization_cache = {}
-        self.parent_updated = False
-        self.old_parent = None
+        self.old_parent = {}
+
+
+# Monkey patch django.db.models.Model.save_base() to attach a RxMeta instance
+# before pre_save signal and to cleanup after post_save.
+from django.db.models import Model
+save_base = Model.save_base
+
+def rx_save_base(self, *args, **kwargs):
+    self._rx = RxMeta()
+    result = save_base(self, *args, **kwargs)
+    del self._rx
+    return result
+
+Model.save_base = rx_save_base
 
 
 class SignalHandler:
@@ -125,15 +131,9 @@ class SignalHandler:
                 self._schedule(serialized, layer)
 
         def prepare_save(sender, instance, **kwargs):
-            if getattr(instance, '_rx', None):
-                return
-            instance._rx = RxMeta()
             # Check if this instance has changed parent
             # If so we need to relay the old and new parent
-            if not layer.reverse_acessor:
-                return
-            if kwargs.get('created', False):
-                instance._rx.parent_updated = True
+            if not layer.reverse_acessor or kwargs.get('created', False):
                 return
             try:
                 current = sender.objects.get(pk=instance.pk or instance.id)
@@ -148,8 +148,7 @@ class SignalHandler:
                 return
             new_parent = getattr(instance, acessor)
             if new_parent != old_parent:
-                instance._rx.parent_updated = True
-                instance._rx.old_parent = old_parent
+                instance._rx.old_parent[layer] = old_parent
 
         def _relay_instance(_layer, instance, tstamp, operation, already_relayed=None):
             if not instance:
@@ -222,13 +221,14 @@ class SignalHandler:
                 _relay_instance(layer, instance, tstamp, operation)
                 if not layer.origin or not layer.reverse_acessor:
                     return
-                if created or instance._rx.parent_updated:
+                old_parent = instance._rx.old_parent.get(layer, None)
+                if created or old_parent:
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
                         parent = getattr(parent, reverse_acessor, None)
                     _relay_instance(layer.origin, parent, tstamp, 'update')
-                    old_pa = instance._rx.old_parent
-                    _relay_instance(layer.origin, old_pa, tstamp, 'update')
+                    if old_parent:
+                        _relay_instance(layer.origin, old_parent, tstamp, 'update')
 
         def prepare_deletion(sender, instance, **kwargs):
             """Obtain anchors prior to deletion and store in instance"""
