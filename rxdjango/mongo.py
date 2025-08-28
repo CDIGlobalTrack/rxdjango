@@ -14,6 +14,7 @@ try:
 except ImportError:
     from rxdjango.utils import delta_utils
 
+
 class MongoStateSession:
 
     def __init__(self, channel, anchor_id):
@@ -91,12 +92,20 @@ class MongoStateSession:
 
 class MongoSignalWriter:
     def __init__(self, channel_class):
+        self.channel_class = channel_class
+        self.db = None
+        self.collection = None
+
+    def connect(self):
         # Make a new connection, because this needs to be sync
         client = pymongo.MongoClient(settings.MONGO_URL)
         self.db = client[settings.MONGO_STATE_DB]
-        self.collection = self.db[channel_class.__name__.lower()]
+        self.collection = self.db[self.channel_class.__name__.lower()]
 
     def init_database(self):
+        if self.collection is None:
+            self.connect()
+
         self.collection.drop()
 
         self.collection.create_index(
@@ -118,6 +127,9 @@ class MongoSignalWriter:
         )
 
     def write_instances(self, anchor_id, instances):
+        if self.collection is None:
+            self.connect()
+
         deltas = []
 
         for instance in instances:
