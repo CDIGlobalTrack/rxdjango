@@ -6,7 +6,7 @@ from django.db.models.signals import (pre_save, post_save,
                                       post_migrate)
 from django.db import transaction, models, ProgrammingError
 from .mongo import MongoSignalWriter
-from .redis import RedisSession, sync_get_tstamp
+from .redis import RedisSession, sync_get_tstamp, is_active
 from .exceptions import RxDjangoBug
 
 
@@ -272,6 +272,8 @@ class SignalHandler:
         if anchors is None:
             anchors = state_model.get_anchors(serialized)
         for anchor in anchors:
+            if not is_active(self.channel_class, anchor.id):
+                continue
             deltas = self.mongo.write_instances(anchor.id, payload)
             if deltas:
                 self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)
