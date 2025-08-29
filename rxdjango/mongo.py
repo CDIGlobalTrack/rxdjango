@@ -171,6 +171,28 @@ class MongoSignalWriter:
         return deltas
 
 
+class AsyncMongoWriter:
+    def __init__(self, channel_class):
+        self.channel_class = channel_class
+        client = AsyncIOMotorClient(settings.MONGO_URL)
+        self.db = client[settings.MONGO_STATE_DB]
+        self.collection = self.db[self.channel_class.__name__.lower()]
+
+    async def replace_instance(self, anchor_id, instance):
+        instance = _adapt(instance)
+        instance["_anchor_id"] = anchor_id
+        assert instance["_tstamp"]
+
+        await self.collection.update_one(
+                {
+                    "_anchor_id": anchor_id,
+                    "_instance_type": instance["_instance_type"],
+                    "id": instance["id"],
+                },
+                {"$set": instance},
+            )
+
+
 def _adapt(instance):
     adapted = {}
     for key, value in instance.items():
