@@ -77,6 +77,7 @@ class ContextChannelMeta(type):
         new_class._state_model = StateModel(anchor)
         new_class._wsrouter = WebsocketRouter(new_class.name)
         new_class._signal_handler = SignalHandler(new_class)
+        new_class._mongo = AsyncMongoWriter(new_class)
         new_class._anchor_model = anchor.Meta.model
         new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
         new_class._consumer_methods = get_consumer_methods(new_class)

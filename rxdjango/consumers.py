@@ -1,4 +1,5 @@
 import json
+import importlib
 from typing import Callable
 from datetime import datetime
 from pytz import utc
@@ -11,7 +12,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
 from .actions import execute_action
-from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
+from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist, InvalidInstanceError
 from rxdjango.serialize import json_dumps
 
 
@@ -32,6 +33,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         self.wsrouter = None
         self.tstamp = None
         self.session = None
+        self.instances = {}
 
     async def connect(self):
         """Accept any connection and just wait for a token."""
@@ -197,6 +199,8 @@ class StateConsumer(AsyncWebsocketConsumer):
 
     async def relay(self, payload):
         payload = payload['payload']
+        for instance in payload:
+            self.track_instance(instance)
         await self.send(text_data=json_dumps(payload))
 
     async def receive_action(self, action):
@@ -205,12 +209,86 @@ class StateConsumer(AsyncWebsocketConsumer):
         params = action.pop('params')
 
         try:
-            action['result'] = await execute_action(self.channel, method_name, params)
+            if method_name == '_save_instance':
+                action['result'] = await self.save_instance(params[0])
+            else:
+                action['result'] = await execute_action(self.channel, method_name, params)
+            await self.send(text_data=json.dumps(action))
+        except ForbiddenError as e:
+            action['error'] = e.message
             await self.send(text_data=json.dumps(action))
         except Exception as e:
             action['error'] = 'Error'
             await self.send(text_data=json.dumps(action))
             raise
+
+    def track_instance(self, instance):
+        operation = instance.get('_operation', 'create')
+        _type = instance['_instance_type']
+        _id = instance['id']
+
+        if operation == 'delete':
+            try:
+                del self.instances[(_type, _id)]
+            except KeyError:
+                pass
+        else:
+            self.instances[(_type, _id)] = instance
+
+    async def save_instance(self, instance):
+        _type = instance['_instance_type']
+        _id = instance['id']
+
+        if '_anchor_id' not in instance:
+            raise ForbiddenError(f'Missing _anchor_id')
+
+        anchor_id = instance['_anchor_id']
+
+        if anchor_id not in self.anchor_ids:
+            raise ForbiddenError(f'Unknown anchor {anchor_id}')
+
+        try:
+            current = self.instances[(_type, _id)]
+        except KeyError:
+            raise ForbiddenError(f'Unknown instance ({_type}, {_id})')
+
+        for key in instance:
+            if key not in current:
+                raise ForbiddenError(f'Unknown field {key}')
+
+        instance['_tstamp'] = await get_tstamp()
+
+        await asyncio.gather(
+            self.channel.mongo.replace_instance(instance),
+            # TODO check if this instance belongs to just one user
+            await self.wsrouter.dispatch([instance], anchor_id),
+        )
+        try:
+            await self.save_instance_to_db(instance)
+        except Exception as e:
+            # Rollback
+            await asyncio.gather(
+                self.channel.mongo.replace_instance(current),
+                self.wsrouter.dispatch([current], anchor_id),
+            )
+            raise e
+        else:
+            self.instances[(_type, _id)] = { **current, **instance }
+
+    @database_sync_to_async
+    def save_instance_to_db(instance):
+        instance = instance.copy()
+        del instance['_anchor_id']
+        del instance['_operation']
+        del instance['_tstamp']
+        serializer_path = instance.pop('_instance_type')
+        module_path, class_name = serializer_path.rsplit('.', 1)
+        module = importlib.import_module(module_path)
+        Serializer = getattr(module, class_name)
+        serializer = Serializer(data=instance)
+        if not serializer.is_valid():
+            raise InvalidInstanceError(serializer.errors)
+        serializer.save()
 
     async def send_connection_status(self, status_code, error=None):
         data = {}
