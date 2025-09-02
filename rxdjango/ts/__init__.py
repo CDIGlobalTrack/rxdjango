@@ -33,6 +33,7 @@ def export_interface(Serializer) -> None:
     """Mark this serializer so that its interface will be exported"""
     if issubclass(Serializer, serializers.Serializer):
         __serializers.add(_key(Serializer))
+    return Serializer
 
 
 def ts_exported(Serializer) -> bool:
@@ -124,7 +125,7 @@ def _git_relative_path(filepath):
         # If the git command fails, return the original path
         return filepath
 
-    
+
 def get_ts_type(ftype):
     if type(ftype) is types.UnionType :
         py_types = typing.get_args(ftype)
@@ -140,4 +141,3 @@ def snake_to_camel(s):
     # We capitalize the first letter of each component except the first one
     # with the 'title' method and join them together.
     return components[0] + ''.join(x.title() for x in components[1:])
-
