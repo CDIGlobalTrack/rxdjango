@@ -13,11 +13,12 @@ class StateModel:
     layers of the serializer.
     """
 
-    def __init__(self, state_serializer, many=False, origin=None, instance_property=None, query_property=None, reverse_acessor=None):
+    def __init__(self, state_serializer, active_flag, many=False, origin=None, instance_property=None, query_property=None, reverse_acessor=None):
         self.nested_serializer = state_serializer
         self.many = many
         self.origin = origin
         self.reverse_acessor = reverse_acessor
+        self.active_flag = active_flag
 
         if origin is None:
             # This is the top-most call, this layer is the anchor
@@ -102,8 +103,16 @@ class StateModel:
         for peer_model in peer_models:
             anchor_key = peer_model.anchor_key
             kwargs = {anchor_key: serialized['id']}
+            if self.active_flag:
+                kwargs[self.active_flag] = True
             for instance in self.anchor.model.objects.filter(**kwargs):
                 yield instance
+
+    def clean_active(self):
+        if not self.active_flag:
+            return
+        kwargs = {self.active_flag: False}
+        self.anchor.model.objects.update(**kwargs)
 
     def serialize_instance(self, instance, tstamp):
         data = self.flat_serializer(instance).data
@@ -199,6 +208,7 @@ class StateModel:
             related_descriptor = getattr(descriptor.field.model, descriptor.field.name)
             return StateModel(
                 serializer.child,
+                None,
                 True,
                 self,
                 field_name,
@@ -210,6 +220,7 @@ class StateModel:
             related_descriptor = getattr(descriptor.field.model, descriptor.field.name)
             return StateModel(
                 serializer.child,
+                None,
                 True,
                 self,
                 field_name,
@@ -220,6 +231,7 @@ class StateModel:
         if isinstance(descriptor, related_descriptors.ForwardManyToOneDescriptor):
             return StateModel(
                 serializer,
+                None,
                 False,
                 self,
                 field_name,
@@ -230,6 +242,7 @@ class StateModel:
         if isinstance(descriptor, related_descriptors.ReverseOneToOneDescriptor):
             return StateModel(
                 serializer,
+                None,
                 False,
                 self,
                 field_name,
@@ -252,6 +265,7 @@ class StateModel:
             many = getattr(serializer, 'many', False)
             return StateModel(
                 serializer.child if many else serializer,
+                None,
                 many,
                 self,
                 field_name,
