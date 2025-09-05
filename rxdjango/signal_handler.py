@@ -273,7 +273,16 @@ class SignalHandler:
             anchors = state_model.get_anchors(serialized)
         for anchor in anchors:
             deltas = self.mongo.write_instances(anchor.id, payload)
-            if deltas:
+            from django.conf import settings
+            if anchor.__class__.__name__ == 'Run':
+                from django.utils import timezone
+                from inspection.tasks import log_run_state
+                log_run_state.delay(anchor.id)
+                fh = open('/tmp/signal.log', 'a')
+                fh.write(f'{timezone.now()} - Run {anchor.id} - {len(deltas)} {anchor.use_magnet}\n')
+                fh.close()
+
+            if deltas or not getattr(settings, 'RX_USE_DELTAS', True):
                 self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)
 
     def broadcast_instance(self, anchor_id, instance, operation='update'):
