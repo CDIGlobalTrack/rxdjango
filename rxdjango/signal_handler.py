@@ -272,9 +272,8 @@ class SignalHandler:
         if anchors is None:
             anchors = state_model.get_anchors(serialized)
         for anchor in anchors:
-            deltas = self.mongo.write_instances(anchor.id, payload)
-            if deltas:
-                self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)
+            self.mongo.write_instances(anchor.id, payload)
+            self.wsrouter.sync_dispatch(payload, anchor.id, user_id)
 
     def broadcast_instance(self, anchor_id, instance, operation='update'):
         kwargs = {
