@@ -14,7 +14,7 @@ class RxMeta():
     """
     RxMeta is a lightweight container object used to store
     per-instance metadata during the lifecycle of Django model
-    signals (pre_save, post_save, pre_delete, post_delete).
+    signals
 
     Attributes
     ----------
@@ -164,20 +164,21 @@ class SignalHandler:
 
             for _instance in instances:
                 key = f'{_layer.instance_type}:{_instance.id}'
-                cache_key = f'{key}:{operation}'
+                # cache_key = f'{key}:{operation}'
                 try:
                     instance._rx
                 except AttributeError:
                     instance._rx = RxMeta()
-                try:
-                    serialized = instance._rx.serialization_cache[cache_key]
-                except KeyError:
+                # try:
+                #     serialized = instance._rx.serialization_cache[cache_key]
+                # except KeyError:
+                if True:
                     if operation == 'delete':
                         serialized = _layer.serialize_delete(_instance, tstamp)
                     else:
                         serialized = _layer.serialize_instance(_instance, tstamp)
                     serialized['_operation'] = operation
-                    instance._rx.serialization_cache[cache_key] = serialized
+                    # instance._rx.serialization_cache[cache_key] = serialized
 
                 if key in already_relayed:
                     continue
