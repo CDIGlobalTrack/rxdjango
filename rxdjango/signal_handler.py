@@ -164,26 +164,23 @@ class SignalHandler:
 
             for _instance in instances:
                 key = f'{_layer.instance_type}:{_instance.id}'
-                # cache_key = f'{key}:{operation}'
                 try:
-                    instance._rx
+                    _instance._rx
                 except AttributeError:
-                    instance._rx = RxMeta()
-                # try:
-                #     serialized = instance._rx.serialization_cache[cache_key]
-                # except KeyError:
-                if True:
+                    _instance._rx = RxMeta()
+                try:
+                    serialized = _instance._rx.serialization_cache[key]
+                except KeyError:
                     if operation == 'delete':
                         serialized = _layer.serialize_delete(_instance, tstamp)
                     else:
                         serialized = _layer.serialize_instance(_instance, tstamp)
                     serialized['_operation'] = operation
-                    # instance._rx.serialization_cache[cache_key] = serialized
+                    # _instance._rx.serialization_cache[key] = serialized
 
                 if key in already_relayed:
                     continue
                 already_relayed.add(key)
-
                 self._schedule(serialized, _layer)
 
                 if False and operation == 'create':
