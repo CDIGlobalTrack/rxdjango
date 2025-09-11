@@ -165,34 +165,17 @@ class SignalHandler:
             for _instance in instances:
                 key = f'{_layer.instance_type}:{_instance.id}'
                 try:
-                    _instance._rx
-                except AttributeError:
-                    _instance._rx = RxMeta()
-                try:
-                    cached = _instance._rx.serialization_cache[key]
-                except KeyError:
-                    cached = None
-                if True:
+                    serialized = _instance._rx.serialization_cache[key]
+                except (KeyError, AttributeError):
                     if operation == 'delete':
                         serialized = _layer.serialize_delete(_instance, tstamp)
                     else:
                         serialized = _layer.serialize_instance(_instance, tstamp)
                     serialized['_operation'] = operation
-                    _instance._rx.serialization_cache[key] = serialized
-                # Trying to find out tests fail, is cached version different?
-                if cached:
-                    cached.pop('_tstamp')
-                bak = serialized.pop('_tstamp')
-                if cached and cached != serialized:
-                    fh_cached = open(f'/tmp/cached-{tstamp}.dump', 'w')
-                    fh_serial = open(f'/tmp/serial-{tstamp}.dump', 'w')
-                    import json, logging
-                    fh_cached.write(json.dumps(cached, indent=4))
-                    fh_serial.write(json.dumps(serialized, indent=4))
-                    fh_cached.close()
-                    fh_serial.close()
-                    logging.getLogger(__name__).error(f"Cached and serialized differ at {tstamp}")
-                serialized['_tstamp'] = bak
+                    try:
+                        _instance._rx.serialization_cache[key] = serialized
+                    except AttributeError:
+                        pass
 
                 if key in already_relayed:
                     continue
@@ -235,7 +218,10 @@ class SignalHandler:
                 _relay_instance(layer, instance, tstamp, operation)
                 if not layer.origin or not layer.reverse_acessor:
                     return
-                old_parent = instance._rx.old_parent.get(layer, None)
+                try:
+                    old_parent = instance._rx.old_parent.get(layer, None)
+                except AttributeError:
+                    old_parent = None
                 if created or old_parent:
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
