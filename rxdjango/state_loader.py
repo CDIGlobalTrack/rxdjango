@@ -94,6 +94,10 @@ class StateLoader:
     @database_sync_to_async
     def _get_anchor_from_db(self):
         Anchor = self.state_model.model
+        active_flag = self.state_model.active_flag
+        if active_flag:
+            kwargs = { active_flag: True }
+            Anchor.objects.filter(id=self.anchor_id).update(**kwargs)
         try:
             return Anchor.objects.get(id=self.anchor_id)
         except Anchor.DoesNotExist:

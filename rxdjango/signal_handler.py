@@ -34,6 +34,7 @@ class SignalHandler:
         self._setup = True
 
         def init_cache_database(sender, **kwargs):
+            self.state_model.clean_active()
             self.mongo.init_database()
             RedisSession.init_database(self.channel_class)
 

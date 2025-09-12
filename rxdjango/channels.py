@@ -1,7 +1,7 @@
 import json
 import channels.layers
 from channels.db import database_sync_to_async
-from django.db import ProgrammingError
+from django.db import models, ProgrammingError
 from rest_framework import serializers
 
 from .consumers import StateConsumer, get_consumer_methods
@@ -71,10 +71,22 @@ class ContextChannelMeta(type):
                 'serializers.ModelSerializer'
             )
 
+        if getattr(meta, 'optimize_anchors', False):
+            # Add _rx boolean field to model to filter active_channels
+            module = new_class.__module__.replace('.', '_').lower()
+            active_flag = f'_rx_{module}_{new_class.__name__.lower()}'
+            model = anchor.Meta.model
+            anchor.Meta.model.add_to_class(
+                active_flag,
+                models.BooleanField(null=True, default=False, db_index=True),
+            )
+        else:
+            active_flag = None
+
         # Attach the state model, websocket router, and signal handler.
         new_class.meta = meta
         new_class.many = many
-        new_class._state_model = StateModel(anchor)
+        new_class._state_model = StateModel(anchor, active_flag)
         new_class._wsrouter = WebsocketRouter(new_class.name)
         new_class._signal_handler = SignalHandler(new_class)
         new_class._anchor_model = anchor.Meta.model
