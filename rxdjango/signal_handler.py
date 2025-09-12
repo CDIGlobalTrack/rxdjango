@@ -18,25 +18,16 @@ class RxMeta():
 
     Attributes
     ----------
-    serialization_cache : dict
-        A cache of serialized representations of the instance,
-        one per serializer class.
-        This avoids redundant calls to expensive serialization
-        logic during a single transaction.
-
     old_parent : dict
         Stores the old parent object if the parent relationship
-        changed during the save, for each layer. This allows the
+        that binds the instance to a channel. This allows the
         signal handler to relay updates for both the new and the
         old parent.
 
     An `RxMeta` instance is attached dynamically to models
-    handled by SignalHandler during save lifecycle:
-
-        instance._rx = RxMeta()
+    handled by SignalHandler during save lifecycle.
     """
     def __init__(self):
-        self.serialization_cache = {}
         self.old_parent = {}
 
 
@@ -164,21 +155,17 @@ class SignalHandler:
 
             for _instance in instances:
                 key = f'{_layer.instance_type}:{_instance.id}'
-                try:
-                    serialized = _instance._rx.serialization_cache[key]
-                except (KeyError, AttributeError):
-                    if operation == 'delete':
-                        serialized = _layer.serialize_delete(_instance, tstamp)
-                    else:
-                        serialized = _layer.serialize_instance(_instance, tstamp)
-                    serialized['_operation'] = operation
-                    try:
-                        _instance._rx.serialization_cache[key] = serialized
-                    except AttributeError:
-                        pass
 
                 if key in already_relayed:
                     continue
+
+                if operation == 'delete':
+                    serialized = _layer.serialize_delete(_instance, tstamp)
+                else:
+                    serialized = _layer.serialize_instance(_instance, tstamp)
+
+                serialized['_operation'] = operation
+
                 already_relayed.add(key)
                 self._schedule(serialized, _layer)
 
