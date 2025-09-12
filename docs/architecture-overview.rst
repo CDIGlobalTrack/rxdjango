@@ -14,8 +14,7 @@ Each *ContextChannel* subclass must contain a *Meta* class declaring
 the *state* property, which must be an instance of `rest_framework.serializers.ModelSerializer`.
 Usually, this is a nested serializer with many layers of serializers.
 RxDjango splits the nested serializer into several flat serializers
-and iterate to register a post_save signal for each of them (and maybe
-a pre_save too, if the Meta class has *optimistic* set to True).
+and iterate to register a post_save signal for each of them.
 
 These signals will serialize each instance that composes the nested
 serialization structure, broadcast them to all connected clients and

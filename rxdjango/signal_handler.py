@@ -52,20 +52,6 @@ class SignalHandler:
 
     def _connect_layer(self, layer):
         """Register signals for models of this layer"""
-        def relay_instance_optimistically(sender, instance, **kwargs):
-            if sender is layer.model:
-                tstamp = sync_get_tstamp()
-                if not instance.id:
-                    # Doesn't matter to optimistically send new object if
-                    # referring instance is not updated
-                    # This can be implemented by sending a patch on the parent,
-                    # using only the id, without hitting the database
-                    return
-
-                serialized = layer.serialize_instance(instance, tstamp)
-                serialized['_operation'] = 'update'
-                serialized['_optimistic'] = True
-                self._schedule(serialized, layer)
 
         def prepare_save(sender, instance, **kwargs):
             # Check if this instance has changed parent
@@ -175,14 +161,6 @@ class SignalHandler:
                 self._schedule(serialized, layer, instance._anchors)
 
         uid = '-'.join(['cache', self.name] + layer.instance_path)
-
-        if layer.optimistic:
-            pre_save.connect(
-                relay_instance_optimistically,
-                sender=layer.model,
-                dispatch_uid=f'{uid}-optimistic',
-                weak=False,
-            )
 
         pre_save.connect(
             prepare_save,
