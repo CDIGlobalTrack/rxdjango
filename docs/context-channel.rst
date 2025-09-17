@@ -65,7 +65,7 @@ The state property must be set to a `serializers.ModelSerializer
 <https://www.django-rest-framework.org/api-guide/serializers/#modelserializer>`_
 instance. If `many=True` is passed to the serializer, this channel will be
 a **multiple instances channel**, otherwise, it will be a **single instance channel**.
-This affects which methods will be called
+This affects which methods will be called by the framework.
 
 auto_update
 -----------
@@ -78,6 +78,17 @@ should be added or not. Instances are added to the beginning of the state list.
 
 Attention: If each connected client creates instances often, this has performance
 of O(N²), as each instance will be checked by each connected client.
+
+optimize_broadcasts
+-------------------
+
+If `optimize_broadcasts` is set to True, a new boolean field will be created in
+the channel's anchor model to indicate if that channel is active or not for that
+instance. (A channel is considered active if it's :doc:`cache state <caching>`
+is HOT). When saving instances related to that channel, those instances will
+only be relayed to channels that are active.
+
+You'll need to run `manage.py makemigrations` after changing this option.
 
 RuntimeState class
 ==================
