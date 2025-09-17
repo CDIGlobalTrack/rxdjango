@@ -158,31 +158,29 @@ class SignalHandler:
                 already_relayed.add(key)
                 self._schedule(serialized, _layer)
 
-                if False and operation == 'create':
-                    # This has been disabled because it broadcast peers recursively,
-                    # making simple things like creating a project take a long time
-                    # when there are a lot of projects in a customer.
-                    # The original intention of this block was to move together all
-                    # children when an instance changed parent, we need another way.
-                    # ----
-                    # If instance is being created in this channel,
-                    # then all related objects need to be scheduled
-                    for attribute, child_layer in _layer.children.items():
-                        child = getattr(_instance, attribute, None)
-                        if child is None:
-                            continue
-                        elif isinstance(child, models.QuerySet):
-                            children = child.all()
-                        else:
-                            children = [child]
-
-                        for child in children:
-                            try:
-                                if child.id is None:
-                                    continue
-                            except AttributeError:
-                                pass
-                            _relay_instance(child_layer, child, tstamp, operation, already_relayed)
+                # The original intention of this block was to move together all
+                # children when an instance changed parent, but it has been disabled
+                # because it was consuming too much resources.
+                #
+                # if operation == 'create':
+                #     # If instance is being created in this channel,
+                #     # then all related objects need to be scheduled
+                #     for attribute, child_layer in _layer.children.items():
+                #         child = getattr(_instance, attribute, None)
+                #         if child is None:
+                #             continue
+                #         elif isinstance(child, models.QuerySet):
+                #             children = child.all()
+                #         else:
+                #             children = [child]
+                #
+                #         for child in children:
+                #             try:
+                #                 if child.id is None:
+                #                     continue
+                #             except AttributeError:
+                #                 pass
+                #             _relay_instance(child_layer, child, tstamp, operation, already_relayed)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
