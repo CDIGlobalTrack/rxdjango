@@ -224,15 +224,23 @@ def serialize_type(serializer):
                 auto = getattr(field, 'auto_now', False) or getattr(field, 'auto_now_add', False)
             except AttributeError:
                 pass
+            try:
+                field = field.related
+            except AttributeError:
+                pass
         else:
             auto = False
 
         if key != 'id':
-            if value.required:
-                property = property + "?"
+            if isinstance(value, serializers.ModelSerializer):
+                try:
+                    if field.null:
+                        property = f'{property}?'
+                except AttributeError:
+                    pass
 
             if value.allow_null and not auto:
-                type = type + " | null"
+                type = f'{type} | null'
 
         ts_fields.append(f"    {property}: {type};")
     collapsed_fields = '\n'.join(ts_fields)
