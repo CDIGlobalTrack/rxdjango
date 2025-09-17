@@ -228,9 +228,6 @@ def serialize_type(serializer):
             auto = False
 
         if key != 'id':
-            if value.required:
-                property = property + "?"
-
             if value.allow_null and not auto:
                 type = type + " | null"
 
