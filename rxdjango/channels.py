@@ -71,7 +71,9 @@ class ContextChannelMeta(type):
                 'serializers.ModelSerializer'
             )
 
-        if getattr(meta, 'optimize_anchors', False):
+        # optimize_broadcasts were formely optimize_anchors.
+        if getattr(meta, 'optimize_broadcasts', False) or \
+           getattr(meta, 'optimize_anchors', False):
             # Add _rx boolean field to model to filter active_channels
             module = new_class.__module__.replace('.', '_').lower()
             active_flag = f'_rx_{module}_{new_class.__name__.lower()}'
