@@ -172,6 +172,9 @@ class MongoSignalWriter:
                     upsert=True,
                 )
 
+            if 'TriggerSerializer' in instance['_instance_type']:
+                print(f'DEBUG TRIGGER {instance}')
+
             if (original is None
                 or instance['_operation'] == 'delete'
                 or instance.get('_deleted', False) != original.get('_deleted', False)
