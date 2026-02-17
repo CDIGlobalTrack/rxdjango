@@ -9,6 +9,7 @@ from django.db.models import Model
 from .mongo import MongoSignalWriter
 from .redis import RedisSession, sync_get_tstamp
 from .exceptions import RxDjangoBug
+from .transaction_manager import TransactionBroadcastManager, PendingBroadcast
 
 
 class RxMeta():
@@ -130,11 +131,20 @@ class SignalHandler:
             if new_parent != old_parent:
                 instance._rx.old_parent[layer] = old_parent
 
-        def _relay_instance(_layer, instance, tstamp, operation, already_relayed=None):
+        def _schedule_instance(_layer, instance, operation, already_scheduled=None):
+            """
+            Schedule an instance for broadcast at transaction commit time.
+
+            Instead of serializing immediately (which captures mid-transaction state),
+            we store a reference to the instance and serialize at commit time when
+            the final committed state is available.
+
+            For autocommit mode (no active transaction), serializes and relays immediately.
+            """
             if not instance:
                 return
-            if already_relayed is None:
-                already_relayed = set()
+            if already_scheduled is None:
+                already_scheduled = set()
             if isinstance(instance, models.Model):
                 instances = [instance]
             elif isinstance(instance, models.Manager):
@@ -145,51 +155,38 @@ class SignalHandler:
             for _instance in instances:
                 key = f'{_layer.instance_type}:{_instance.id}'
 
-                if key in already_relayed:
+                if key in already_scheduled:
                     continue
 
-                if operation == 'delete':
-                    serialized = _layer.serialize_delete(_instance, tstamp)
+                already_scheduled.add(key)
+
+                # Check if we're in a transaction
+                if transaction.get_autocommit():
+                    # No transaction - serialize and relay immediately
+                    tstamp = sync_get_tstamp()
+                    if operation == 'delete':
+                        serialized = _layer.serialize_delete(_instance, tstamp)
+                    else:
+                        serialized = _layer.serialize_instance(_instance, tstamp)
+                    serialized['_operation'] = operation
+                    self._relay(serialized, _layer)
                 else:
-                    serialized = _layer.serialize_instance(_instance, tstamp)
-
-                serialized['_operation'] = operation
-
-                already_relayed.add(key)
-                self._schedule(serialized, _layer)
-
-                # The original intention of this block was to move together all
-                # children when an instance changed parent, but it has been disabled
-                # because it was consuming too much resources.
-                #
-                # if operation == 'create':
-                #     # If instance is being created in this channel,
-                #     # then all related objects need to be scheduled
-                #     for attribute, child_layer in _layer.children.items():
-                #         child = getattr(_instance, attribute, None)
-                #         if child is None:
-                #             continue
-                #         elif isinstance(child, models.QuerySet):
-                #             children = child.all()
-                #         else:
-                #             children = [child]
-                #
-                #         for child in children:
-                #             try:
-                #                 if child.id is None:
-                #                     continue
-                #             except AttributeError:
-                #                 pass
-                #             _relay_instance(child_layer, child, tstamp, operation, already_relayed)
+                    # In transaction - defer serialization to commit time
+                    pending = PendingBroadcast(
+                        model_class=_instance.__class__,
+                        instance_id=_instance.pk or _instance.id,
+                        state_model=_layer,
+                        operation=operation,
+                    )
+                    TransactionBroadcastManager.add(self, pending)
 
         def relay_instance(sender, instance, **kwargs):
             if sender is layer.model:
-                tstamp = sync_get_tstamp()
                 created = kwargs.get('created', None)
                 operation = kwargs.get('_operation', 'update' if not created else 'create')
                 if operation == 'create':
                     created = True
-                _relay_instance(layer, instance, tstamp, operation)
+                _schedule_instance(layer, instance, operation)
                 if not layer.origin or not layer.reverse_acessor:
                     return
                 try:
@@ -200,12 +197,19 @@ class SignalHandler:
                     parent = instance
                     for reverse_acessor in layer.reverse_acessor.split('.'):
                         parent = getattr(parent, reverse_acessor, None)
-                    _relay_instance(layer.origin, parent, tstamp, 'update')
+                    _schedule_instance(layer.origin, parent, 'update')
                     if old_parent:
-                        _relay_instance(layer.origin, old_parent, tstamp, 'update')
+                        _schedule_instance(layer.origin, old_parent, 'update')
 
         def prepare_deletion(sender, instance, **kwargs):
-            """Obtain anchors prior to deletion and store in instance"""
+            """
+            Obtain anchors and serialize prior to deletion.
+
+            For deletions, we must serialize BEFORE the delete happens
+            because the instance won't exist at commit time. We store
+            the serialized data and anchors on the instance for use
+            in the post_delete signal.
+            """
             if sender is layer.model:
                 tstamp = sync_get_tstamp()
                 serialized = layer.serialize_delete(instance, tstamp)
@@ -214,9 +218,32 @@ class SignalHandler:
                 instance._serialized = serialized
 
         def relay_delete_instance(sender, instance, **kwargs):
+            """
+            Schedule the delete broadcast using pre-computed data.
+
+            Uses the serialized data and anchors stored during pre_delete
+            since the instance no longer exists in the database.
+            """
             if sender is layer.model:
                 serialized = instance._serialized
-                self._schedule(serialized, layer, instance._anchors)
+                anchors = instance._anchors
+
+                if transaction.get_autocommit():
+                    # No transaction - relay immediately
+                    self._relay(serialized, layer, anchors)
+                else:
+                    # In transaction - defer to commit time
+                    # For deletes, we pass the pre-serialized data since
+                    # the instance won't exist at commit time
+                    pending = PendingBroadcast(
+                        model_class=sender,
+                        instance_id=serialized['id'],
+                        state_model=layer,
+                        operation='delete',
+                        anchors=anchors,
+                        delete_serialized=serialized,
+                    )
+                    TransactionBroadcastManager.add(self, pending)
 
         uid = '-'.join(['cache', self.name] + layer.instance_path)
 
@@ -290,6 +317,13 @@ class SignalHandler:
         )
 
     def _schedule(self, serialized, state_model, anchors=None):
+        """
+        Legacy method for scheduling pre-serialized data.
+
+        This is kept for backwards compatibility with code that
+        pre-serializes data (like deletions). For new code, prefer
+        using the TransactionBroadcastManager directly.
+        """
         if serialized['id'] is None and serialized['_operation'] == 'create':
             raise RxDjangoBug('Saving instance without id causes data leakage. '
                               'Check stack trace to fix this bug.')
@@ -301,7 +335,7 @@ class SignalHandler:
             lambda: self._relay(serialized, state_model, anchors)
         )
 
-    def _relay(self, serialized, state_model, anchors):
+    def _relay(self, serialized, state_model, anchors=None):
         """Send one update for both cache and connected clients"""
         user_id = serialized.get('_user_key', None)
         payload = [serialized]
@@ -313,9 +347,50 @@ class SignalHandler:
                 self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)
 
     def broadcast_instance(self, anchor_id, instance, operation='update'):
-        kwargs = {
-            '_operation': operation
-        }
+        """
+        Broadcast an instance update to all connected clients.
+
+        This method is called externally (not via signals) to trigger
+        a broadcast. It uses the same deferred serialization approach
+        as the signal handlers to ensure consistency.
+
+        Args:
+            anchor_id: The anchor (root object) ID for the channel
+            instance: The model instance to broadcast
+            operation: 'create', 'update', or 'delete'
+        """
         sender = instance.__class__
-        for relay_instance in self.relay_map[sender]:
-            relay_instance(sender, instance, **kwargs)
+
+        # Find the state model layer for this instance type
+        state_model_layer = None
+        for layer in self.state_model.models():
+            if layer.model is sender:
+                state_model_layer = layer
+                break
+
+        if state_model_layer is None:
+            # Model not in this channel's state - fall back to old behavior
+            kwargs = {'_operation': operation}
+            for relay_instance in self.relay_map[sender]:
+                relay_instance(sender, instance, **kwargs)
+            return
+
+        # Use deferred serialization
+        if transaction.get_autocommit():
+            # No transaction - serialize and relay immediately
+            tstamp = sync_get_tstamp()
+            if operation == 'delete':
+                serialized = state_model_layer.serialize_delete(instance, tstamp)
+            else:
+                serialized = state_model_layer.serialize_instance(instance, tstamp)
+            serialized['_operation'] = operation
+            self._relay(serialized, state_model_layer)
+        else:
+            # In transaction - defer serialization to commit time
+            pending = PendingBroadcast(
+                model_class=sender,
+                instance_id=instance.pk or instance.id,
+                state_model=state_model_layer,
+                operation=operation,
+            )
+            TransactionBroadcastManager.add(self, pending)
