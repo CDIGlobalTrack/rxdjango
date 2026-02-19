@@ -5,6 +5,25 @@
 Architecture Overview
 =====================
 
+Key Architectural Principles
+============================
+
+- **Serializers define both REST API structure and real-time state.** The same
+  nested ``ModelSerializer`` that powers your REST endpoints defines the
+  WebSocket state tree.
+- **Instances are flattened and cached.** Nested serializer output is split into
+  flat instances stored in MongoDB, then rebuilt on the client side.
+- **Django signals trigger automatic updates.** Model ``save()`` and ``delete()``
+  calls are intercepted to serialize changes, update the cache, and broadcast
+  deltas to connected clients.
+- **TypeScript interfaces are auto-generated.** Running ``makefrontend``
+  introspects your serializers and channels to produce typed TypeScript code.
+- **Each ContextChannel creates a stateful WebSocket connection** for a specific
+  data context (one anchor instance or a list of instances).
+
+How It Works
+============
+
 The core of RxDjango is the `rxdjango.channel.ContextChannel` class.
 On initialization, all apps are scanned for a file called `channels.py`,
 and for *ContextChannel* subclasses inside those files. Then, a set of signals
@@ -56,5 +75,17 @@ frontend, in which the need for Django views and React reducers is eliminated. T
 instance state in the backend is automatically built and updated in the frontend,
 and methods from the backend can be called directly from the frontend using the
 established authenticated connection through a websocket.
+
+Transaction-Aware Broadcasting
+===============================
+
+RxDjango uses a ``TransactionBroadcastManager`` to ensure that broadcasts
+reflect the final committed state of a database transaction, not mid-transaction
+snapshots. When multiple model saves occur within a transaction, broadcasts
+are deferred and deduplicated — only the final state is serialized and sent
+at ``transaction.on_commit()`` time.
+
+Authentication
+==============
 
 RxDjango relies on `rest_framework.authtoken.models.Token` for authentication.

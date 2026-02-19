@@ -1,5 +1,5 @@
 
-:: _using-rxdjango:
+.. _using-rxdjango:
 
 ==============
 Using RxDjango
@@ -256,3 +256,29 @@ the runtime state:
       const channel = new MyContextChannel(instanceId, auth.token);
       const { state, runtimeState } = useChannelState<MyNestedType, MyContextChannelRuntimeState>(channel);
     }
+
+Important Constraints
+---------------------
+
+Keep these constraints in mind when working with RxDjango:
+
+- **Always use** ``instance.save()`` for model updates. ``YourModel.objects.update()``
+  bypasses Django signals and breaks real-time synchronization.
+
+- **Channel files must be named** ``channels.py`` in a Django app for auto-discovery
+  to find ContextChannel subclasses.
+
+- **Authentication is token-only.** RxDjango uses
+  ``rest_framework.authtoken.models.Token`` exclusively for WebSocket authentication.
+
+- **@action methods must be async.** All methods decorated with ``@action`` must be
+  defined with ``async def``. Synchronous action methods will raise ``ActionNotAsync``
+  during channel initialization.
+
+- **Custom properties need @related_property.** Model properties included in
+  serializers must use the ``@related_property`` decorator so RxDjango can track
+  which related model changes should trigger re-serialization.
+
+- **Run makefrontend after changes.** After modifying serializers or ContextChannel
+  classes, run ``python manage.py makefrontend`` to regenerate TypeScript interfaces
+  and channel classes.

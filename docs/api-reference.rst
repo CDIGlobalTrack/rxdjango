@@ -36,6 +36,17 @@ Base class for creating real-time channels.
       :value: False
 
       Add ``_rx_*`` boolean fields to models for efficient filtering.
+      When enabled, the metaclass adds a ``BooleanField`` (with ``db_index=True``)
+      to the anchor model, allowing optimized queries for active channels.
+
+   .. py:attribute:: Meta.cache_ttl
+      :type: int | None
+      :value: None
+
+      Per-channel TTL override in seconds. When set, this channel's cache
+      will expire after the specified duration instead of using the global
+      ``RX_CACHE_TTL`` setting. Set to ``None`` (default) to use the global
+      setting.
 
    .. py:method:: has_permission(user, **kwargs) -> bool
 
@@ -101,6 +112,30 @@ Base class for creating real-time channels.
       :param var: Variable name
       :param value: Variable value (must be JSON-serializable)
 
+   .. py:method:: send(*args, **kwargs)
+      :async:
+
+      Proxy to the underlying ``AsyncWebsocketConsumer.send()``.
+      Use this to send arbitrary data to the connected client.
+
+   .. py:method:: group_add(group)
+      :async:
+
+      Add this consumer to a Django Channels group. Use this in
+      ``on_connect()`` to subscribe to group events handled by
+      ``@consumer`` decorated methods.
+
+      :param group: The group name to join
+
+   .. py:method:: serialize_instance(instance, tstamp=0) -> dict
+      :async:
+
+      Serialize a model instance using the channel's state model.
+      Returns a flat dictionary suitable for broadcasting.
+
+      :param instance: The Django model instance to serialize
+      :param tstamp: Timestamp to attach to the serialized data
+
    .. py:classmethod:: broadcast_instance(anchor_id, instance, operation='update')
 
       Manually broadcast an instance update to all connected clients.
@@ -120,10 +155,30 @@ Base class for creating real-time channels.
    .. py:classmethod:: clear_cache(anchor_id)
       :async:
 
-      Clear the MongoDB cache for a specific anchor.
+      Clear the MongoDB cache for a specific anchor via the COOLING state.
+
+      Transitions HOT → COOLING, migrates instances from MongoDB to a Redis
+      list (so clients that connect during the process can still read state),
+      then transitions to COLD. If a client connects during COOLING, the state
+      transitions to HEATING and instances are reheated (written back to MongoDB).
 
       :param anchor_id: The anchor ID whose cache should be cleared
-      :returns: True if cache was cleared, False if rate-limited
+      :returns: True if cache was cleared (or reheated), False if not HOT
+
+   .. py:classmethod:: get_cache_ttl() -> int
+
+      Get the cache TTL in seconds for this channel.
+
+      Resolution order:
+
+      1. ``Meta.cache_ttl`` on the channel class (per-channel override)
+      2. ``RX_CACHE_TTL`` Django setting (global override)
+      3. Default: 604800 (1 week)
+
+   .. py:classmethod:: get_registered_channels() -> set
+
+      Return all registered ContextChannel subclasses. Useful for
+      introspection and cache management tooling.
 
 
 Decorators
@@ -176,32 +231,33 @@ Decorators
            await self.send(text_data=json.dumps(event['data']))
 
 
-@extend_ts
-~~~~~~~~~~
-
-.. py:decorator:: extend_ts(**fields)
-
-   Add custom TypeScript properties to generated interfaces.
-
-   :param fields: Mapping of field names to TypeScript type strings
-
-   Example::
-
-       @extend_ts(computed_field='string')
-       class MySerializer(serializers.ModelSerializer):
-           ...
-
-
 @related_property
 ~~~~~~~~~~~~~~~~~
 
 .. py:decorator:: related_property(accessor, reverse_accessor=None)
 
    Mark a Python ``@property`` on a model with the accessor path so
-   RxDjango can track its dependencies.
+   RxDjango can track its dependencies. This is required for custom
+   model properties that are included in serializers — without it,
+   RxDjango cannot determine which related model changes should trigger
+   re-serialization.
 
-   :param accessor: The query path to reach related instances
+   The decorator replaces the function with a standard Python ``property``
+   and registers the accessor paths in a global registry used by
+   ``StateModel`` during serializer introspection.
+
+   :param accessor: The query path to reach related instances (e.g. ``'items'``)
    :param reverse_accessor: The reverse path from the related model back
+       (e.g. ``'order'``)
+
+   Example::
+
+       from rxdjango.decorators import related_property
+
+       class Order(models.Model):
+           @related_property('items', 'order')
+           def total_price(self):
+               return sum(item.price for item in self.items.all())
 
 
 Serializer Meta Options
@@ -236,6 +292,98 @@ additional options for real-time behavior.
    :value: 3
 
    Seconds before server state overrides optimistic updates.
+
+
+Exceptions
+----------
+
+All exceptions are defined in ``rxdjango.exceptions``.
+
+.. py:exception:: UnknownProperty
+
+   Raised when a serializer references a model property that does not exist.
+   Typically indicates a missing ``@related_property`` decorator on a custom
+   model property.
+
+.. py:exception:: AnchorDoesNotExist
+
+   Raised when the requested anchor object cannot be found during WebSocket
+   connection. Occurs when the anchor ID from the URL route does not match
+   any database record.
+
+.. py:exception:: UnauthorizedError
+
+   Raised when authentication fails due to a missing or invalid token.
+   Results in a 401 status code sent to the client.
+
+.. py:exception:: ForbiddenError
+
+   Raised when an authenticated user lacks permission to access a channel.
+   Occurs when ``has_permission()`` returns ``False``, resulting in a 403
+   status code.
+
+.. py:exception:: RxDjangoBug
+
+   Raised when an internal invariant is violated. Indicates a bug in
+   RxDjango itself. If encountered, please report it as an issue.
+
+.. py:exception:: ActionNotAsync
+
+   Raised during channel initialization when an ``@action``-decorated method
+   is not defined with ``async def``. All action methods must be async.
+
+
+WebSocket Protocol
+------------------
+
+The WebSocket message format used between the Django backend and React
+frontend.
+
+Incoming Messages (Client → Server)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Authentication (must be the first message after connecting)::
+
+    {"token": "<rest_framework_auth_token>", "last_update": <timestamp|null>}
+
+Action call (RPC)::
+
+    {"callId": <unique_id>, "action": "methodName", "params": [...]}
+
+Outgoing Messages (Server → Client)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Connection status::
+
+    {"status_code": 200}
+    {"status_code": 401, "error": "error/unauthorized"}
+    {"status_code": 403, "error": "error/forbidden"}
+    {"status_code": 404, "error": "error/not-found"}
+
+Initial anchor list (sent after authentication)::
+
+    {"initialAnchors": [1, 2, 3]}
+
+State instances (array of flat instances)::
+
+    [{"id": 1, "_instance_type": "app.Serializer", "_tstamp": ..., ...}, ...]
+
+End of initial state marker::
+
+    [{"_instance_type": "", "_tstamp": ..., "_operation": "end_initial_state", "id": 0}]
+
+Action response::
+
+    {"callId": <id>, "result": ...}
+    {"callId": <id>, "error": "Error"}
+
+Runtime state change::
+
+    {"runtimeVar": "varName", "value": ...}
+
+Prepend anchor (for ``many=True`` channels)::
+
+    {"prependAnchor": <anchor_id>}
 
 
 Frontend API (TypeScript)
@@ -386,15 +534,79 @@ Stores flattened instance data with optimistic locking.
 - Documents contain serialized instance data plus metadata
 - ``_tstamp`` field for change tracking and incremental loading
 - Optimistic locking prevents concurrent write conflicts
+- Documents exceeding MongoDB's 16MB limit are transparently stored
+  in GridFS and referenced via a ``_grid_ref`` field
 
 Redis (Coordination)
 ~~~~~~~~~~~~~~~~~~~~
 
 Handles transient state and coordination:
 
-- Cooldown tracking to rate-limit broadcasts per instance
+- Cache state management (COLD / HEATING / HOT / COOLING)
+- Active WebSocket session tracking per anchor
+- ``last_disconnect`` timestamps for TTL-based expiry
+- Instance lists during HEATING and COOLING transitions
+- Pub/sub triggers for coordinating concurrent state loads
 - Timestamp generation for consistent ordering
-- Channel-level state coordination
+
+
+Management Commands
+-------------------
+
+expire_rxdjango_cache
+~~~~~~~~~~~~~~~~~~~~~
+
+Expire stale caches that have exceeded their configured TTL.
+
+.. code-block:: bash
+
+    # Expire all stale caches
+    python manage.py expire_rxdjango_cache
+
+    # Preview what would be expired without making changes
+    python manage.py expire_rxdjango_cache --dry-run
+
+This command is idempotent and safe to run concurrently (atomic Lua scripts
+prevent double transitions). Schedule it via cron or Celery beat:
+
+.. code-block:: bash
+
+    # cron - run every 5 minutes
+    */5 * * * * cd /path/to/project && python manage.py expire_rxdjango_cache
+
+.. code-block:: python
+
+    # Celery beat
+    CELERY_BEAT_SCHEDULE = {
+        'expire-rx-caches': {
+            'task': 'myapp.tasks.expire_rx_caches',
+            'schedule': 300,
+        },
+    }
+
+broadcast_system_message
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Broadcast a message to all connected WebSocket clients via the system channel.
+
+.. code-block:: bash
+
+    python manage.py broadcast_system_message <source> <message>
+
+The ``source`` parameter identifies the type of message (e.g. ``maintenance``).
+The ``message`` parameter is the human-readable message text.
+
+makefrontend
+~~~~~~~~~~~~
+
+Generate TypeScript interfaces and channel classes from Django serializers
+and ContextChannel subclasses.
+
+.. code-block:: bash
+
+    python manage.py makefrontend              # Generate all TS files
+    python manage.py makefrontend --dry-run    # Preview changes
+    python manage.py makefrontend --force      # Force rebuild all files
 
 
 Configuration
@@ -439,17 +651,33 @@ Required Django Settings
 Optional Settings
 ~~~~~~~~~~~~~~~~~
 
-.. py:data:: RX_COOLDOWN_SECONDS
-   :type: int
-   :value: 1
-
-   Minimum seconds between broadcasts for the same instance.
-
 .. py:data:: RX_CACHE_TTL
    :type: int
-   :value: 3600
+   :value: 604800
 
-   Seconds before cached state expires.
+   Global cache TTL in seconds. When no active WebSocket sessions are
+   connected to an anchor, the TTL countdown begins from the last
+   disconnect time. After the TTL elapses, the ``expire_rxdjango_cache``
+   command will transition the cache from HOT to COLD.
+
+   Defaults to 604800 (1 week). Can be overridden per-channel via
+   ``Meta.cache_ttl`` on the ContextChannel subclass.
+
+.. py:data:: RXDJANGO_SYSTEM_CHANNEL
+   :type: str
+   :value: '_rxdjango_system'
+
+   Name of the Django Channels group used for system-wide broadcasts
+   (e.g. maintenance messages via ``broadcast_system_message``).
+
+.. py:data:: TESTING
+   :type: bool
+   :value: False
+
+   When ``True`` (along with ``DEBUG``), the state loader annotates
+   initial state instances with a ``_cache_state`` field indicating
+   whether the data came from COLD, HEATING, or HOT cache. Useful
+   for debugging cache behavior during development.
 
 Required Django Apps
 ~~~~~~~~~~~~~~~~~~~~

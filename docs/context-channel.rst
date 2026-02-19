@@ -1,5 +1,5 @@
 
-:: _context-channel:
+.. _context-channel:
 
 ========================
 The ContextChannel class
@@ -79,6 +79,30 @@ should be added or not. Instances are added to the beginning of the state list.
 Attention: If each connected client creates instances often, this has performance
 of O(N²), as each instance will be checked by each connected client.
 
+optimize_anchors
+----------------
+
+When `optimize_anchors` is set to `True`, the metaclass adds a boolean field
+(``_rx_<module>_<channelname>``) with ``db_index=True`` to the anchor model.
+This allows efficient database queries to filter only active anchors, improving
+performance when many anchor instances exist but only a few have active
+WebSocket connections.
+
+cache_ttl
+---------
+
+Per-channel cache TTL override in seconds. When set, this channel's cache will
+expire after the specified duration instead of using the global ``RX_CACHE_TTL``
+setting. Defaults to ``None`` (use global setting).
+
+.. code-block:: python
+
+   class MyContextChannel(ContextChannel):
+
+       class Meta:
+           state = MyNestedSerializer()
+           cache_ttl = 3600  # Expire after 1 hour instead of the global default
+
 RuntimeState class
 ==================
 
@@ -157,11 +181,72 @@ on_disconnect
 
 This method is called when client disconnects.
 
+group_add
+---------
+
+Add this consumer to a Django Channels group. Call this in ``on_connect()`` to
+subscribe to events that will be handled by ``@consumer`` decorated methods.
+
+.. code-block:: python
+
+   async def on_connect(self, tstamp):
+       await self.group_add('my_group')
+
+send
+----
+
+Proxy to the underlying ``AsyncWebsocketConsumer.send()``. Use this to send
+arbitrary JSON data to the connected client.
+
+serialize_instance
+------------------
+
+Serialize a model instance using the channel's state model. Returns a flat
+dictionary suitable for broadcasting. This is an async method that wraps
+the state model's synchronous serialization in ``database_sync_to_async``.
+
 clear_cache
 -----------
 
-This classmethod receives the id of an instance in this channel and clears the cache
-for that instance.
+This classmethod receives the id of an anchor in this channel and clears the cache
+for that anchor via the COOLING state. Returns ``True`` if the cache was cleared,
+``False`` if the anchor was not in HOT state.
+
+Class Methods
+=============
+
+broadcast_instance
+------------------
+
+Manually broadcast an instance update to all connected clients for a given anchor.
+
+.. code-block:: python
+
+   MyContextChannel.broadcast_instance(anchor_id, instance, operation='update')
+
+The ``operation`` parameter can be ``'create'``, ``'update'``, or ``'delete'``.
+
+broadcast_notification
+----------------------
+
+Send a notification to connected clients for a given anchor.
+
+.. code-block:: python
+
+   MyContextChannel.broadcast_notification(anchor_id, {'message': 'Hello'}, user_id=None)
+
+If ``user_id`` is provided, the notification is sent only to that user.
+
+get_cache_ttl
+-------------
+
+Returns the cache TTL in seconds for this channel, checking ``Meta.cache_ttl``
+first, then the global ``RX_CACHE_TTL`` setting, then defaulting to 1 week.
+
+get_registered_channels
+-----------------------
+
+Returns the set of all registered ContextChannel subclasses.
 
 runtime_state
 -------------
@@ -174,3 +259,34 @@ set_runtime_var
 ---------------
 
 This sets one runtime variable, which will be relayed to the frontend and updated there.
+
+Serializer Meta Options
+=======================
+
+RxDjango extends the standard DRF serializer ``Meta`` with additional options
+that control real-time behavior for individual serializer layers.
+
+user_key
+--------
+
+Field name that identifies the owning user. When set, instances are only
+sent to the WebSocket client whose user matches this field value.
+
+.. code-block:: python
+
+   class TaskSerializer(serializers.ModelSerializer):
+       class Meta:
+           model = Task
+           fields = ['id', 'title', 'owner']
+           user_key = 'owner'
+
+optimistic
+----------
+
+Enable optimistic updates. When ``True``, the frontend can immediately
+reflect changes before server confirmation. Defaults to ``False``.
+
+optimistic_timeout
+------------------
+
+Seconds before server state overrides optimistic updates. Defaults to ``3``.

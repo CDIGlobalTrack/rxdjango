@@ -94,7 +94,7 @@ subclass.
             state = MyNestedSerializer()
 
         @staticmethod
-        def has_permission(self, user, instance):
+        def has_permission(user, instance):
             # check if user has permission on instance
             return True
 
