@@ -19,3 +19,4 @@ be implemented.
    context-channel
    makefrontend
    caching
+   api-reference
