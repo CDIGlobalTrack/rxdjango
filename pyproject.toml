@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rxdjango"
+version = "0.0.44"
+description = "Django-React real-time state synchronization via WebSockets"
+readme = "README.md"
+license = {file = "LICENSE.md"}
+authors = [
+    {name = "Luis Fagundes", email = "lhfagundes@gmail.com"}
+]
+requires-python = ">=3.10"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Framework :: Django :: 4.2",
+    "Framework :: Django :: 5.0",
+    "Framework :: Django :: 5.1",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+]
+dependencies = [
+    "Django>=4.2",
+    "motor>=3.3",
+    "channels>=4",
+    "channels-redis>=4.1",
+    "djangorestframework>=3",
+    "daphne>=4.1.0",
+    "pytz",
+]
+
+[project.urls]
+Homepage = "https://github.com/CDIGlobalTrack/rxdjango"
+Repository = "https://github.com/CDIGlobalTrack/rxdjango"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rxdjango*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.c", "*.h"]
