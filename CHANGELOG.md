@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.44] - 2026-02-19
+
 ### Changed
 - Defer broadcast serialization to transaction commit time
 
@@ -331,7 +333,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### 2022-10-23
 - Initial repository creation
 
-[Unreleased]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.43...HEAD
+[Unreleased]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.44...HEAD
+[0.0.44]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.43...v0.0.44
 [0.0.43]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.37...v0.0.43
 [0.0.41]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.37...v0.0.41
 [0.0.40]: https://github.com/CDIGlobalTrack/rxdjango/compare/v0.0.37...v0.0.40
