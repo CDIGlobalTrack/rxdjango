@@ -11,9 +11,22 @@ __actions = set()
 
 
 def action(method):
-    """Methods in a ContextChannel decorated with @action will be
-    implemented in the frontend counterpart ContextChannel class,
-    so that the method can be called directly from the frontend.
+    """Decorator to expose a ContextChannel method as a frontend-callable RPC action.
+
+    Actions are automatically discovered and exported to the generated TypeScript
+    channel class. The method must be async.
+
+    The decorated method's type hints are inspected to auto-convert parameters
+    (e.g. ``datetime`` strings are converted to ``datetime`` objects).
+
+    Example::
+
+        @action
+        async def update_status(self, status: str) -> dict:
+            # Called from frontend: await channel.updateStatus("active")
+            self.instance.status = status
+            self.instance.save()
+            return {"success": True}
     """
     if not asyncio.iscoroutinefunction(method):
         raise ActionNotAsync(f'@action decorator requires "{method.__name__}" to be async')
