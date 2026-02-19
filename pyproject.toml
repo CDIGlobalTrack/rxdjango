@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rxdjango"
-version = "0.0.44"
+version = "0.0.45"
 description = "Django-React real-time state synchronization via WebSockets"
 readme = "README.md"
 license = {file = "LICENSE.md"}
