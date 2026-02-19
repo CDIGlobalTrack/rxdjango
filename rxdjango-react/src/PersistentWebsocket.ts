@@ -6,6 +6,7 @@ import {
 import { ActionResponse } from './actions.d';
 
 
+/** Reasons that permanently prevent WebSocket reconnection. */
 const preventReconnectionReasons = {
   'authentication-error': 'authentication-error',
   'protocol-error': 'protocol-error',
@@ -13,6 +14,21 @@ const preventReconnectionReasons = {
   'manual-disconnect': 'manual-disconnect'
 };
 
+/**
+ * WebSocket wrapper with automatic reconnection and message routing.
+ *
+ * Handles connection drops gracefully with exponential backoff retry.
+ * Routes incoming messages to appropriate handlers based on message type
+ * (instances, action responses, runtime state changes, etc.).
+ *
+ * @example
+ * ```typescript
+ * const ws = new PersistentWebSocket('wss://example.com/ws/', authToken);
+ * ws.onInstances = (instances) => { ... };
+ * ws.onConnected = () => { ... };
+ * ws.connect();
+ * ```
+ */
 export default class PersistentWebSocket {
 
   private url: string;
@@ -41,6 +57,13 @@ export default class PersistentWebSocket {
   public onEmpty: () => void = () => {};
   public onError: (error: Error) => void = () => {};
 
+  /**
+   * @param url - WebSocket URL to connect to
+   * @param token - Auth token sent as the first message after connection
+   * @param protocols - Optional WebSocket sub-protocols
+   * @param initialReconnectInterval - Initial reconnect delay in ms (doubles on each retry)
+   * @param maxReconnectInterval - Maximum reconnect delay in ms
+   */
   constructor(
     url: string,
     token: string,
@@ -57,6 +80,7 @@ export default class PersistentWebSocket {
     this.authStatusReceived = false;
   }
 
+  /** Initiate WebSocket connection. Sends auth token on open. */
   connect() {
     if (this.ws)
       return;
@@ -141,6 +165,7 @@ export default class PersistentWebSocket {
     };
   }
 
+  /** Send a string message through the WebSocket. Logs error if not connected. */
   send(data: string) {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(data);
@@ -149,6 +174,7 @@ export default class PersistentWebSocket {
     }
   }
 
+  /** Attempt to reconnect with exponential backoff. */
   persistentReconnect(wasClean: boolean = false) {
     this.ws = undefined;
     if (!this.authStatusReceived || !wasClean) {
@@ -159,6 +185,11 @@ export default class PersistentWebSocket {
     }
   }
 
+  /**
+   * Close the WebSocket connection.
+   *
+   * @param reason - If provided, prevents automatic reconnection
+   */
   disconnect(reason?: keyof typeof preventReconnectionReasons) {
     if (this.timer && reason) {
       clearTimeout(this.timer);

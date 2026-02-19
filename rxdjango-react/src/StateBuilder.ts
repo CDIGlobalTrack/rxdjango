@@ -7,40 +7,61 @@ import {
 } from './ContextChannel.interfaces';
 
 
+/**
+ * Reconstructs nested state from flat server instances.
+ *
+ * The backend sends instances in a flat format with `_instance_type` fields.
+ * StateBuilder maintains an instance registry and rebuilds the nested
+ * structure expected by React components. It simulates reducer behavior:
+ * on every instance update, all references to that instance are changed,
+ * and parent references are recursively updated to trigger React re-renders.
+ *
+ * @template T - The type of the root/anchor instance
+ *
+ * @example
+ * ```typescript
+ * const builder = new StateBuilder<Project>(model, 'myapp.serializers.ProjectSerializer', false);
+ *
+ * // Handle incoming instances from server
+ * builder.update([
+ *   { id: 1, _instance_type: 'myapp.serializers.ProjectSerializer', name: 'Project 1', ... },
+ *   { id: 1, _instance_type: 'myapp.serializers.TaskSerializer', title: 'Task 1', ... }
+ * ]);
+ *
+ * // Get rebuilt nested state
+ * const state = builder.state;
+ * // { id: 1, name: 'Project 1', tasks: [{ id: 1, title: 'Task 1' }] }
+ * ```
+ */
 export default class StateBuilder<T> {
-  /***
-   * StateBuilder simulates the behavior of a reducer.
-   * On every instance update, all references to that instance are changed,
-   * and all references to those instances will recusiverly have their
-   * references changed too.
-   * This is expected to do the exact same thing as a reducer would do,
-   * dispatching { ...state, updated_variable } for each update.
-   */
 
-  // The model of the channel with this state
+  /** The model definition mapping instance types to their relational fields. */
   private model: Model;
 
-  // Anchor is the _instance_type property of the root model
+  /** The `_instance_type` string of the root/anchor serializer. */
   private anchor: string;
   private rootType: string | undefined;
 
-  // The instance id of the anchor for this state
+  /** Ordered list of anchor instance IDs. */
   private anchorIds: number[] = [];
 
-  // An index with references for all nodes in the state tree
-  // Key is _instance_type:id properties of instance
+  /** Index of all instances by `_instance_type:id` key. */
   private index: { [key: string]: InstanceType } = {};
 
-  // A track of all references to each instance, so that we can
-  // recursively change references of objects that need to be triggered
-  // in react
+  /** Tracks all references to each instance for recursive change propagation. */
   private refs: { [key:string]: InstanceReference[] } = {};
 
-  // A track of all anchors in context, to avoid duplication
+  /** Tracks which anchor IDs are loaded to avoid duplication. */
   private anchorIndex: { [key:number]: boolean } = {};
 
+  /** Whether this channel uses many=True (list of anchors). */
   private many: boolean;
 
+  /**
+   * @param model - The model definition from the generated channel
+   * @param anchor - The `_instance_type` of the root serializer
+   * @param many - Whether the channel state is a list of anchors
+   */
   constructor(model: Model, anchor: string, many: boolean) {
     this.model = model;
     this.anchor = anchor;
@@ -48,12 +69,18 @@ export default class StateBuilder<T> {
     this.rootType = undefined;
   }
 
+  /** Prepend an anchor ID to the front of the list (for newly added instances). */
   public prependAnchorId(anchorId: number) {
       this.anchorIds.unshift(anchorId);
       this.anchorIndex[anchorId] = true;
   }
 
-  // Returns the current state. Every call returns a different reference.
+  /**
+   * Returns the current rebuilt nested state.
+   * Each call returns a new reference to trigger React re-renders.
+   *
+   * @returns The nested state object (single or array), or undefined if no anchors loaded.
+   */
   public get state(): T | T[] | undefined {
     if (!this.many && !this.anchorIds.length)
       return undefined;
@@ -69,7 +96,11 @@ export default class StateBuilder<T> {
     });
   }
 
-  // Receives an update from the server, with several instances
+  /**
+   * Process a batch of instance updates from the server.
+   *
+   * @param instances - Array of flat instances with `_instance_type` and `_operation` fields
+   */
   public update(instances: TempInstance[] | number[]) {
     if (typeof instances[0] === 'object') {
       for (const instance of instances) {
@@ -80,6 +111,13 @@ export default class StateBuilder<T> {
     }
   }
 
+  /**
+   * Get an instance by its key.
+   *
+   * @param key - Instance key in format `_instance_type:id`
+   * @returns The instance object
+   * @throws Error if instance not found
+   */
   public getInstance(key: string) {
     if (!this.index[key]) {
       throw new Error(`Instance ${key} not found`);
@@ -96,6 +134,10 @@ export default class StateBuilder<T> {
     this.anchorIds = [instance.id];
   }
 
+  /**
+   * Set the initial anchor IDs received from the server.
+   * Creates placeholder (unloaded) instances for each anchor.
+   */
   public setAnchors(instanceIds: number[]) {
     this.anchorIds = instanceIds;
     this.anchorIds.forEach((anchorId) => {
