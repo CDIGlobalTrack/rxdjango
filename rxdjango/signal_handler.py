@@ -1,6 +1,11 @@
+from __future__ import annotations
+
+from typing import Any
+
 import channels.layers
 from asgiref.sync import async_to_sync
 from collections import defaultdict
+from django.apps import AppConfig
 from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
                                       post_migrate)
@@ -29,8 +34,8 @@ class RxMeta():
     An `RxMeta` instance is attached dynamically to models
     handled by SignalHandler during save lifecycle.
     """
-    def __init__(self):
-        self.old_parent = {}
+    def __init__(self) -> None:
+        self.old_parent: dict[Any, Model] = {}
 
 
 # Monkey patch django.db.models.Model.save_base() to attach a RxMeta instance
@@ -38,7 +43,7 @@ class RxMeta():
 save_base = Model.save_base
 
 
-def rx_save_base(self, *args, **kwargs):
+def rx_save_base(self: Model, *args: Any, **kwargs: Any) -> Model:
     self._rx = RxMeta()
     result = save_base(self, *args, **kwargs)
     del self._rx
@@ -75,7 +80,7 @@ class SignalHandler:
         Guard to prevent multiple signal registrations.
     """
 
-    def __init__(self, channel_class):
+    def __init__(self, channel_class: type) -> None:
         self.channel_class = channel_class
         self.name = channel_class.name
         self.state_model = channel_class._state_model
@@ -85,7 +90,7 @@ class SignalHandler:
 
         self._setup = False
 
-    def setup(self, app_config):
+    def setup(self, app_config: AppConfig) -> None:
         if self._setup:
             return
         self._setup = True
@@ -108,7 +113,7 @@ class SignalHandler:
         if self.channel_class.meta.auto_update:
             self._connect_anchor_events()
 
-    def _connect_layer(self, layer):
+    def _connect_layer(self, layer: Any) -> None:
         """Register signals for models of this layer"""
 
         def prepare_save(sender, instance, **kwargs):
@@ -277,7 +282,7 @@ class SignalHandler:
 
         self.relay_map[layer.model].append(relay_instance)
 
-    def _connect_anchor_events(self):
+    def _connect_anchor_events(self) -> None:
         """Add signal to broadcast creation and deletion of instances"""
         anchor_model = self.channel_class.meta.state.child.Meta.model
         channel_layer = channels.layers.get_channel_layer()
@@ -316,7 +321,7 @@ class SignalHandler:
             weak=False,
         )
 
-    def _schedule(self, serialized, state_model, anchors=None):
+    def _schedule(self, serialized: dict[str, Any], state_model: Any, anchors: list[Model] | None = None) -> None:
         """
         Legacy method for scheduling pre-serialized data.
 
@@ -335,7 +340,7 @@ class SignalHandler:
             lambda: self._relay(serialized, state_model, anchors)
         )
 
-    def _relay(self, serialized, state_model, anchors=None):
+    def _relay(self, serialized: dict[str, Any], state_model: Any, anchors: list[Model] | None = None) -> None:
         """Send one update for both cache and connected clients"""
         user_id = serialized.get('_user_key', None)
         payload = [serialized]
@@ -346,7 +351,7 @@ class SignalHandler:
             if deltas:
                 self.wsrouter.sync_dispatch(deltas, anchor.id, user_id)
 
-    def broadcast_instance(self, anchor_id, instance, operation='update'):
+    def broadcast_instance(self, anchor_id: int, instance: Model, operation: str = 'update') -> None:
         """
         Broadcast an instance update to all connected clients.
 

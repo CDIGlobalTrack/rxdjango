@@ -1,10 +1,13 @@
+from __future__ import annotations
+
 import json
-from typing import Callable
+from typing import Any, Callable
 from datetime import datetime
 from pytz import utc
 from django.utils import timezone
 from django.db import models
 from django.db.models.query import QuerySet
+from django.contrib.auth.models import AbstractBaseUser
 from asgiref.sync import sync_to_async, async_to_sync
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -21,23 +24,23 @@ class StateConsumer(AsyncWebsocketConsumer):
     and real-time data relay to clients. A subclass of StateConsumer will be
     dinamically created by ContextChannel.as_asgi().
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
 
         super().__init__(*args, **kwargs)
 
         self.channel = None
-        self.user = None
-        self.token = None
-        self.anchor_ids = None
+        self.user: AbstractBaseUser | None = None
+        self.token: str | None = None
+        self.anchor_ids: list[int] | None = None
         self.wsrouter = None
-        self.tstamp = None
+        self.tstamp: float | None = None
         self.session = None
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Accept any connection and just wait for a token."""
         await self.accept()
 
-    async def receive(self, text_data):
+    async def receive(self, text_data: str) -> None:
         try:
             data = json.loads(text_data)
         except json.JSONDecodeError:
@@ -49,7 +52,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         else:
             await self.receive_authentication(data)
 
-    async def receive_authentication(self, text_data):
+    async def receive_authentication(self, text_data: dict[str, Any]) -> None:
         # If user is not logged, we expect credentials
         # data = json.loads(text_data)
         data = text_data
@@ -73,7 +76,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         else:
             await self.close()
 
-    async def start(self, user, tstamp):
+    async def start(self, user: AbstractBaseUser, tstamp: float | None) -> None:
         kwargs = self.scope['url_route']['kwargs']
         self.user = user
         self.channel = self.context_channel_class(user, **kwargs)
@@ -114,16 +117,16 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self._load_state(anchor_id)
 
     # Called by channel layers
-    async def instances_list_add(self, event):
+    async def instances_list_add(self, event: dict[str, Any]) -> None:
         instance_id = event['instance_id']
         if await self.channel.is_visible(instance_id):
             await self.channel.add_instance(instance_id, at_beginning=True)
 
-    async def instances_list_remove(self, event):
+    async def instances_list_remove(self, event: dict[str, Any]) -> None:
         instance_id = event['instance_id']
         await self.channel.remove_instance(instance_id)
 
-    async def connect_anchor(self, anchor_id):
+    async def connect_anchor(self, anchor_id: int) -> None:
         await self.wsrouter.connect(
             self.channel_layer,
             self.channel_name,
@@ -131,7 +134,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             self.user_id,
         )
 
-    async def disconnect_anchor(self, anchor_id):
+    async def disconnect_anchor(self, anchor_id: int) -> None:
         await self.wsrouter.disconnect(
             self.channel_layer,
             self.channel_name,
@@ -139,7 +142,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             self.user_id,
         )
 
-    async def _load_state(self, anchor_id):
+    async def _load_state(self, anchor_id: int) -> None:
         async with StateLoader(self.channel, anchor_id) as loader:
             async for instances in loader.list_instances():
                 if instances:
@@ -150,7 +153,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=self.end_of_data)
 
     @property
-    def end_of_data(self):
+    def end_of_data(self) -> str:
         return json_dumps([{
             '_instance_type': '',
             '_tstamp': self.tstamp,
@@ -162,7 +165,7 @@ class StateConsumer(AsyncWebsocketConsumer):
     def serialized_data(self, Serializer, data):
         return Serializer(data).data
 
-    async def disconnect(self, close_code=None):
+    async def disconnect(self, close_code: int | None = None) -> None:
         if not self.channel:
             return
 
@@ -177,7 +180,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         await self.channel.on_disconnect()
 
     @database_sync_to_async
-    def authenticate(self, token):
+    def authenticate(self, token: str) -> AbstractBaseUser:
         try:
             token = Token.objects.get(key=token)
         except Token.DoesNotExist:
@@ -195,11 +198,11 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         return token.user
 
-    async def relay(self, payload):
+    async def relay(self, payload: dict[str, Any]) -> None:
         payload = payload['payload']
         await self.send(text_data=json_dumps(payload))
 
-    async def receive_action(self, action):
+    async def receive_action(self, action: dict[str, Any]) -> None:
         call_id = action['callId']
         method_name = action.pop('action')
         params = action.pop('params')
@@ -212,7 +215,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps(action))
             raise
 
-    async def send_connection_status(self, status_code, error=None):
+    async def send_connection_status(self, status_code: int, error: str | None = None) -> None:
         data = {}
         data['status_code'] = status_code
         if error:
@@ -221,7 +224,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         close = error != None
         await self.send(text_data=text_data, close=close)
 
-    async def prepend_anchor_id(self, anchor_id):
+    async def prepend_anchor_id(self, anchor_id: int) -> None:
         data = {
             'prependAnchor': anchor_id,
         }
@@ -232,7 +235,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 __CONSUMERS = dict()
 
 
-def consumer(event_type):
+def consumer(event_type: str) -> Callable[[Callable], Callable]:
     """Methods in a ContextChannel decorated with @consumer(group) act
     as Django Channel consumer of that group. You have to manually
     call group_add(group) to subscribe to the group for it to work.
@@ -240,7 +243,7 @@ def consumer(event_type):
     if not isinstance(event_type, str):
         raise TypeError("Parameter group @consumer decorator must be a string")
 
-    def decorator(func: Callable):
+    def decorator(func: Callable) -> Callable:
         if not callable(func):
             raise TypeError("@consumer(group) is a decorator and needs to decorate"
                             " a method in a ContextChannel class")
@@ -252,11 +255,11 @@ def consumer(event_type):
     return decorator
 
 
-def get_consumer_methods(cls):
+def get_consumer_methods(cls: type) -> dict[str, tuple[str, Callable]]:
     consumers = __CONSUMERS
     keys = list(__CONSUMERS.keys())
     qualname = '.'.join((cls.__module__, cls.__qualname__))
-    consumer_methods = {}
+    consumer_methods: dict[str, tuple[str, Callable]] = {}
     for key in keys:
         if key.startswith(qualname):
             method_name = key[len(qualname) + 1:]

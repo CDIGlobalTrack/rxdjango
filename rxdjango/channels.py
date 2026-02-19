@@ -1,7 +1,13 @@
+from __future__ import annotations
+
 import json
+from typing import Any
+
 import channels.layers
 from channels.db import database_sync_to_async
 from django.db import models, ProgrammingError
+from django.db.models import Model, QuerySet
+from django.contrib.auth.models import AbstractBaseUser
 from rest_framework import serializers
 
 from .consumers import StateConsumer, get_consumer_methods
@@ -123,20 +129,20 @@ class ContextChannel(metaclass=ContextChannelMeta):
 
         return Consumer.as_asgi()
 
-    def __init__(self, user, **kwargs):
+    def __init__(self, user: AbstractBaseUser, **kwargs: Any) -> None:
         self.kwargs = kwargs
         self.user = user
         self.user_id = user.id
         self._consumer = None  # will be set by consumer
         self.runtime_state = self.RuntimeState() if self.RuntimeState else None
-        self.anchor_ids = []
-        self.anchor_index = set()
+        self.anchor_ids: list[int] = []
+        self.anchor_index: set[int] = set()
 
-    async def send(self, *args, **kwargs):
+    async def send(self, *args: Any, **kwargs: Any) -> None:
         """A proxy method to self._consumer.send"""
         await self._consumer.send(*args, **kwargs)
 
-    async def group_add(self, group):
+    async def group_add(self, group: str) -> None:
         """Add this consumer to a group in channels"""
         channel_layer = channels.layers.get_channel_layer()
         await channel_layer.group_add(
@@ -144,7 +150,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
             self._consumer.channel_name,
         )
 
-    async def initialize_anchors(self):
+    async def initialize_anchors(self) -> None:
         if self.many:
             qs = await self.list_instances(**self.kwargs)
             self.anchor_ids = await self._fetch_instance_ids(qs)
@@ -155,22 +161,22 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.anchor_index = set(self.anchor_ids)
 
     @database_sync_to_async
-    def _fetch_instance_ids(self, qs):
+    def _fetch_instance_ids(self, qs: QuerySet) -> list[int]:
         return [
             instance['id'] for instance in qs.values('id')
         ]
 
-    def get_instance_id(self, **kwargs):
+    def get_instance_id(self, **kwargs: Any) -> int | str:
         """Subclass may implement get_anchor_id, based on url parameters,
         otherwise the first parameter will be assumed to be it"""
         return next(iter(kwargs.values()))
 
-    async def list_instances(self, **kwargs):
+    async def list_instances(self, **kwargs: Any) -> QuerySet:
         """Subclass must implement this if serializer has many=True parameter.
         Returns a queryset"""
         raise NotImplemented
 
-    async def add_instance(self, instance_id, at_beginning=False):
+    async def add_instance(self, instance_id: int, at_beginning: bool = False) -> None:
         if instance_id in self.anchor_index:
             return
         if at_beginning:
@@ -186,25 +192,25 @@ class ContextChannel(metaclass=ContextChannelMeta):
                     data = json_dumps(instances)
                     await self.send(text_data=data)
 
-    async def set_runtime_var(self, var, value):
+    async def set_runtime_var(self, var: str, value: Any) -> None:
         self.runtime_state[var] = value
         payload = { 'runtimeVar': var, 'value': value }
         payload = json.dumps(payload)
         await self.send(text_data=payload)
 
     @database_sync_to_async
-    def serialize_instance(self, instance, tstamp=0):
+    def serialize_instance(self, instance: Model, tstamp: float = 0) -> dict[str, Any]:
         return self._state_model.serialize_instance(instance, tstamp)
 
     @database_sync_to_async
-    def _check_instance(self, qs, instance):
+    def _check_instance(self, qs: QuerySet, instance: Model) -> bool:
         instance = qs.filter(id=instance.id).first()
         return bool(instance)
 
-    async def remove_instance(self, instance_id):
+    async def remove_instance(self, instance_id: int) -> None:
         return await self._remove_instance(instance_id, True)
 
-    async def _remove_instance(self, instance_id, remove):
+    async def _remove_instance(self, instance_id: int, remove: bool) -> None:
         if instance_id not in self.anchor_ids:
             return
         serialized = {
@@ -218,33 +224,33 @@ class ContextChannel(metaclass=ContextChannelMeta):
             self.anchor_ids.remove(instance_id)
             self.anchor_index.remove(instance_id)
 
-    async def clear(self):
+    async def clear(self) -> None:
         for instance_id in self.anchor_ids:
             await self._remove_instance(instance_id, False)
         self.anchor_ids = []
         self.anchor_index = set()
 
     @staticmethod
-    def has_permission(user, **kwargs):
+    def has_permission(user: AbstractBaseUser, **kwargs: Any) -> bool:
         """Implement this method to check if user has permission on a channel"""
         return NotImplemented
 
-    async def is_visible(self, instance_id):
+    async def is_visible(self, instance_id: int) -> bool:
         """Implement this to check if a new instance should be added to this
         channel. You should check if user permission on instance"""
         return NotImplemented
 
-    async def on_connect(self, tstamp):
+    async def on_connect(self, tstamp: float | None) -> None:
         """Called after user has been authenticated.
         tstamp is the tstamp sent on connection, if this is a reconnection"""
         pass
 
-    async def on_disconnect(self):
+    async def on_disconnect(self) -> None:
         """Called when user disconnects"""
         pass
 
     @classmethod
-    async def clear_cache(cls, anchor_id):
+    async def clear_cache(cls, anchor_id: int) -> bool:
         redis = RedisStateSession(cls, anchor_id)
         result = await redis.cooldown()
         if not result:
@@ -253,10 +259,10 @@ class ContextChannel(metaclass=ContextChannelMeta):
         return result
 
     @classmethod
-    def broadcast_instance(cls, anchor_id, instance, operation='update'):
+    def broadcast_instance(cls, anchor_id: int, instance: Model, operation: str = 'update') -> None:
         cls._signal_handler.broadcast_instance(anchor_id, instance, operation)
 
     @classmethod
-    def broadcast_notification(cls, anchor_id, notification, user_id=None):
+    def broadcast_notification(cls, anchor_id: int, notification: dict[str, Any], user_id: int | None = None) -> None:
         notification['_instance_type'] = '_notification'
         cls._wsrouter.sync_dispatch([notification], anchor_id, user_id)

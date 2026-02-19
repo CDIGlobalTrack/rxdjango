@@ -1,7 +1,12 @@
+from __future__ import annotations
+
 from collections import defaultdict
+from typing import Any, Generator, Iterator
+
 from rest_framework import serializers
 from django.db import models, connection
 from django.db import ProgrammingError
+from django.db.models import Model
 from django.db.models.fields import related_descriptors
 from .ts import export_interface
 from .exceptions import UnknownProperty
@@ -13,7 +18,7 @@ class StateModel:
     layers of the serializer.
     """
 
-    def __init__(self, state_serializer, active_flag, many=False, origin=None, instance_property=None, query_property=None, reverse_acessor=None):
+    def __init__(self, state_serializer: serializers.ModelSerializer, active_flag: str | None, many: bool = False, origin: StateModel | None = None, instance_property: str | None = None, query_property: str | None = None, reverse_acessor: str | None = None) -> None:
         self.nested_serializer = state_serializer
         self.many = many
         self.origin = origin
@@ -69,21 +74,21 @@ class StateModel:
 
         export_interface(self.nested_serializer.__class__)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'StateModel for {self.instance_type}'
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return str(self)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> StateModel:
         return self.children[key]
 
-    def models(self):
+    def models(self) -> Iterator[StateModel]:
         for models in self.index.values():
             for model in models:
                 yield model
 
-    def frontend_model(self):
+    def frontend_model(self) -> dict[str, dict[str, str]]:
         frontend = {}
         for key, nodes in self.index.items():
             node = nodes[0]
@@ -96,7 +101,7 @@ class StateModel:
 
         return frontend
 
-    def get_anchors(self, serialized):
+    def get_anchors(self, serialized: dict[str, Any]) -> Iterator[Model]:
         """Get all anchors that should receive an instance"""
         peer_type = serialized['_instance_type']
         peer_models = self.index[peer_type]
@@ -108,25 +113,25 @@ class StateModel:
             for instance in self.anchor.model.objects.filter(**kwargs):
                 yield instance
 
-    def clean_active(self):
+    def clean_active(self) -> None:
         if not self.active_flag:
             return
         kwargs = {self.active_flag: False}
         self.anchor.model.objects.update(**kwargs)
 
-    def serialize_instance(self, instance, tstamp):
+    def serialize_instance(self, instance: Model, tstamp: float) -> dict[str, Any]:
         data = self.flat_serializer(instance).data
         data['_deleted'] = False
         return self._mark(data, tstamp)
 
-    def serialize_delete(self, instance, tstamp):
+    def serialize_delete(self, instance: Model, tstamp: float) -> dict[str, Any]:
         pk = instance.pk or instance.id
         data = self._mark({'id': pk}, tstamp)
         data['_deleted'] = True
         data['_operation'] = 'delete'
         return data
 
-    def serialize_state(self, instance, tstamp):
+    def serialize_state(self, instance: Model, tstamp: float) -> Generator[list[dict[str, Any]], None, None]:
         if self.many:
             data = self.flat_serializer(instance.all(), many=True).data
             instances = instance.all()
@@ -150,7 +155,7 @@ class StateModel:
                 for serialized in peer_model.serialize_state(peer_instance, tstamp):
                     yield serialized
 
-    def _mark(self, serialized, tstamp):
+    def _mark(self, serialized: dict[str, Any], tstamp: float) -> dict[str, Any]:
         serialized['_instance_type'] = self.instance_type
         serialized['_tstamp'] = tstamp
         serialized['_operation'] = 'initial_state'
@@ -160,7 +165,7 @@ class StateModel:
             serialized['_user_key'] = None
         return serialized
 
-    def _disassemble_nested(self):
+    def _disassemble_nested(self) -> tuple[type[serializers.ModelSerializer], dict[str, serializers.BaseSerializer]]:
         serializer_fields = {}
         declared_fields = {}
 
@@ -198,7 +203,7 @@ class StateModel:
 
         return FlatSerializer, serializer_fields
 
-    def _build_child(self, field_name, serializer):
+    def _build_child(self, field_name: str, serializer: serializers.BaseSerializer) -> StateModel | None:
         try:
             descriptor = getattr(self.model, field_name)
         except AttributeError:
@@ -274,7 +279,7 @@ class StateModel:
             )
 
 
-def is_model_serializer(field):
+def is_model_serializer(field: serializers.BaseSerializer) -> bool:
     try:
         return isinstance(field.child, serializers.ModelSerializer)
     except AttributeError:
