@@ -68,6 +68,8 @@ class StateLoader:
         """In COLD state, fetch all instances from database,
         write to mongo and redis and send instances filtered by user
         """
+        # Clean any stale MongoDB data (e.g. from signal writes during COOLING)
+        await MongoStateSession.clear(type(self.channel), self.anchor_id)
         anchor = await self._get_anchor_from_db()
         iterator = self.state_model.serialize_state(anchor, self.tstamp)
 
@@ -118,20 +120,11 @@ class StateLoader:
         async for instances in self.mongo.list_instances(self.user_id):
             yield mark(instances, 'hot')
 
-    async def _list_instances_cooling(self):
-        """In COOLING state, fetch all instances from redis, write to mongo
-        and send instances filtered by user.
-        """
-        async for instances in self.redis.list_instances():
-            await self.mongo.write_instances(instances)
-            instances = self._filter(instances)
-            yield mark(instances, 'cooling')
-
     router = [
         _list_instances_cold,
         _list_instances_heating,
         _list_instances_hot,
-        _list_instances_cooling,
+        None,  # COOLING clients transition to HEATING via load()
     ]
 
     async def list_instances(self):

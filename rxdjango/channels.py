@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 import channels.layers
 from channels.db import database_sync_to_async
 from django.db import models, ProgrammingError
 from django.db.models import Model, QuerySet
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser
 from rest_framework import serializers
 
@@ -70,6 +71,7 @@ class ContextChannelMeta(type):
             anchor = anchor.child
 
         meta.auto_update = getattr(meta, 'auto_update', False) and many
+        meta.cache_ttl = getattr(meta, 'cache_ttl', None)
 
         if not isinstance(anchor, serializers.ModelSerializer):
             raise ProgrammingError(
@@ -98,6 +100,10 @@ class ContextChannelMeta(type):
         new_class._anchor_model = anchor.Meta.model
         new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
         new_class._consumer_methods = get_consumer_methods(new_class)
+
+        # Register this channel class for cache expiry scanning
+        ContextChannel._registry.add(new_class)
+
         return new_class
 
 
@@ -115,6 +121,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
         abstract = True
 
     RuntimeState = None
+    _registry: ClassVar[set[type]] = set()
 
     @classmethod
     def as_asgi(cls):
@@ -249,14 +256,96 @@ class ContextChannel(metaclass=ContextChannelMeta):
         """Called when user disconnects"""
         pass
 
+    RX_CACHE_TTL_DEFAULT = 7 * 24 * 3600  # 1 week
+
+    @classmethod
+    def get_cache_ttl(cls) -> int:
+        """Get the cache TTL in seconds for this channel.
+
+        Checks the channel's Meta.cache_ttl first, then falls back to
+        the global RX_CACHE_TTL Django setting, then to 1 week default.
+
+        Returns:
+            TTL in seconds.
+        """
+        if cls.meta.cache_ttl is not None:
+            return cls.meta.cache_ttl
+        return getattr(settings, 'RX_CACHE_TTL', cls.RX_CACHE_TTL_DEFAULT)
+
+    @classmethod
+    def get_registered_channels(cls) -> set[type]:
+        """Return all registered ContextChannel subclasses."""
+        return cls._registry
+
     @classmethod
     async def clear_cache(cls, anchor_id: int) -> bool:
-        redis = RedisStateSession(cls, anchor_id)
-        result = await redis.cooldown()
-        if not result:
-            return result
-        await MongoStateSession.clear(cls, anchor_id)
-        return result
+        """Clear cache for an anchor via the COOLING state.
+
+        Transitions HOT → COOLING, migrates instances from MongoDB to
+        Redis (for any clients that connect during the process), then
+        transitions to COLD. If a client connects during COOLING, reheats
+        by writing instances back to MongoDB.
+
+        Returns:
+            True if the cache was cleared (or reheated), False if not HOT.
+        """
+        redis_session = RedisStateSession(cls, anchor_id)
+        if not await redis_session.start_cooling():
+            return False
+        return await cls._cooling_cycle(anchor_id, redis_session)
+
+    @classmethod
+    async def _cooling_cycle(cls, anchor_id: int, redis_session: RedisStateSession) -> bool:
+        """Run the COOLING cycle: migrate MongoDB → Redis, then finish.
+
+        Expects state to already be COOLING. Reads instances from MongoDB,
+        pushes them to the Redis list, deletes from MongoDB, then atomically
+        finishes. If a client connected during COOLING (state became HEATING),
+        reheats by writing instances back to MongoDB.
+        """
+        import logging
+        logger = logging.getLogger('rxdjango.cache_expiry')
+
+        # Migrate instances from MongoDB to Redis list
+        all_instances = []
+        async for batch in MongoStateSession.list_and_clear_instances(
+            cls, anchor_id
+        ):
+            all_instances.extend(batch)
+            await redis_session.write_instances(batch)
+
+        result = await redis_session.finish_cooling()
+
+        if result == 1:
+            # A client connected during COOLING (state is now HEATING).
+            # Reheat: write instances back to MongoDB so end_cold_session
+            # can transition to HOT.
+            logger.info(
+                'Reheating %s anchor %s (client connected during COOLING)',
+                cls.__name__, anchor_id,
+            )
+            mongo = cls._create_mongo_writer(anchor_id)
+            await mongo.write_instances(all_instances)
+            await redis_session.end_cold_session(success=True)
+        elif result == 0:
+            logger.info('Expired %s anchor %s -> COLD', cls.__name__, anchor_id)
+        else:
+            logger.warning(
+                'Unexpected state for %s anchor %s during finish_cooling (result=%s)',
+                cls.__name__, anchor_id, result,
+            )
+
+        return True
+
+    @classmethod
+    def _create_mongo_writer(cls, anchor_id: int) -> MongoStateSession:
+        """Create a MongoStateSession without requiring a full channel instance."""
+        class _ChannelProxy:
+            def __init__(self, channel_class):
+                self.__class__.__name__ = channel_class.__name__
+                self.user_id = None
+                self._state_model = channel_class._state_model
+        return MongoStateSession(_ChannelProxy(cls), anchor_id)
 
     @classmethod
     def broadcast_instance(cls, anchor_id: int, instance: Model, operation: str = 'update') -> None:

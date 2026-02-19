@@ -55,10 +55,10 @@ class RedisSession:
         # A pub/sub to notify on new instances as the list is built.
         # It's fed with the size of the list.
         'instances_trigger',
-        # The number of clients relaying instances to the database
-        'relay_writers',
-        # A pub/sub to notify that relay_writers has changed
-        'relay_writers_trigger',
+        # Active WebSocket session count
+        'sessions',
+        # Timestamp when sessions hit 0
+        'last_disconnect',
     ]
 
     def __init__(self, channel, anchor_id):
@@ -75,8 +75,8 @@ class RedisSession:
             self.instances,
             self.readers,
             self.instances_trigger,
-            self.relay_writers,
-            self.relay_writers_trigger,
+            self.sessions,
+            self.last_disconnect,
         ] = self.local_keys
 
         self._conn = None
@@ -90,6 +90,31 @@ class RedisSession:
     async def get_tstamp(self):
         tstamp = await self._conn.time()
         return _make_tstamp(tstamp)
+
+    async def session_connect(self):
+        """Increment the active session count and clear last_disconnect."""
+        script = """
+        redis.call("INCR", KEYS[6])
+        redis.call("DEL", KEYS[7])
+        """
+        await self.connect()
+        fn = self._conn.register_script(script)
+        await fn(keys=self.local_keys)
+
+    async def session_disconnect(self):
+        """Decrement the active session count. If it reaches 0, record the timestamp."""
+        script = """
+        local sessions = redis.call("DECR", KEYS[6])
+        if sessions <= 0 then
+            redis.call("SET", KEYS[6], 0)
+            redis.call("SET", KEYS[7], ARGV[1])
+        end
+        return sessions
+        """
+        await self.connect()
+        tstamp = await self.get_tstamp()
+        fn = self._conn.register_script(script)
+        return await fn(keys=self.local_keys, args=[tstamp])
 
     @classmethod
     def init_database(cls, channel_class):
@@ -157,6 +182,10 @@ class RedisStateSession(RedisSession):
 
             -- update readers to 1, as we're first reader
             redis.call("SET", KEYS[4], 1)
+
+            -- Return 1 (HEATING) since client is now in HEATING state
+            redis.call("SET", KEYS[2], tstamp)
+            return 1
         end
 
         -- Update access timestamp
@@ -227,14 +256,6 @@ class RedisStateSession(RedisSession):
     async def end_hot_session(self, success):
         """HOT session doesn't change anything"""
         pass
-
-    async def end_cooling_session(self, success):
-        """End COOLING session.
-
-        Since we setup readers at 1, this is the same as end_heating_session.
-        """
-        await self.connect()
-        return await self.end_heating_session(success)
 
     async def rollback_to_cold(self):
         """Transition to COLD, and broadcast error message to readers"""
@@ -335,9 +356,14 @@ class RedisStateSession(RedisSession):
                 last_length = int(message['data'])
                 instances_length = abs(last_length)
             else:
-                # Why do we get empty message?
+                # Timeout — check if list grew or if state changed to HOT
                 instances_length = await self._conn.llen(self.instances)
                 if instances_length == last_length:
+                    # No new instances. Check if state is HOT (list is complete).
+                    state = await self._conn.get(self.state)
+                    if state is not None and int(state) == 2:
+                        await pubsub.unsubscribe(self.instances_trigger)
+                        return
                     continue
                 last_length = instances_length
 
@@ -346,160 +372,107 @@ class RedisStateSession(RedisSession):
         end_cold_session,
         end_heating_session,
         end_hot_session,
-        end_cooling_session,
+        end_heating_session,  # COOLING clients transition to HEATING
     ]
 
     async def end(self, success):
         method = self._end_session_methods[self.initial_state]
         return await method(self, success)
 
-    async def cooldown(self):
-        # 1 state,  2 access_time, 3 instances, 4 readers
+    async def start_cooling(self):
+        """Atomically transition HOT → COOLING unconditionally.
+
+        Used by clear_cache for manual/programmatic cache clearing.
+
+        Returns True if transition occurred, False if state is not HOT.
+        """
         script = """
         local state = tonumber(redis.call("GET", KEYS[1])) or 0
-
-        if state == 0 then
-            -- COLD state. Keep cold
-            -- clear instances list and reset readers
-            redis.call("DEL", KEYS[3])
-            redis.call("SET", KEYS[4], 0)
-            return 1
-
-        elseif state == 1 then
-            -- HEATING state. Let's not cooldown, keep heating
-            return 0
-        elseif state == 2 then
-            -- HOT state. TODO proper transition to COOLING
-            redis.call("SET", KEYS[1], 0)
-            redis.call("DEL", KEYS[3])
-            redis.call("SET", KEYS[4], 0)
-            return 1
-        elseif state == 3 then
-            -- COOLING state. Let's not race it, keep cooling
-            return 1
-        else
-            redis.call("SET", KEYS[1], 0)
-            redis.call("DEL", KEYS[3])
-            redis.call("SET", KEYS[4], 0)
-            return 1
-        end
-        """
-        await self.connect()
-        cooldown = self._conn.register_script(script)
-        result = await cooldown(
-            keys=self.local_keys,
-        )
-
-        return result > 0
-
-
-
-class _LockContextManager(RedisSession):
-    """
-    This is a base class for the two context managers that lock
-    one channel for writing or cleanup.
-    It manages the keys 6 and 7 and implements a semaphore to avoid
-    cache cleanup while instances are being written.
-    """
-    timeout = 5
-
-    def __init__(self, channel):
-        super().__init__(channel)
-        self.locked = None
-
-    async def __aenter__(self):
-        await self.connect()
-        _, consumer = await self._conn.subscribe(self.relay_writers_trigger)
-
-        acquire_write_lock = self._conn.register_script(self.lock_script)
-        while True:
-            acquired = await acquire_write_lock(keys=self.local_keys)
-
-            if acquired >= 0:
-                await self._conn.unsubscribe(self.relay_writers_trigger)
-                self.locked = acquired > 0
-                return
-
-            if self.timeout is not None:
-                try:
-                    await asyncio.wait_for(consumer.get(), timeout=self.timeout)
-                except asyncio.TimeoutError:
-                    await self._conn.unsubscribe(self.relay_writers_trigger)
-                    self.locked = False
-                    return
-            else:
-                await consumer.get()
-
-    async def __aexit__(self):
-        if self.locked:
-            release_write_lock = self._conn.register_script(self.release_script)
-            await release_write_lock(keys=self.local_keys)
-
-
-class WriteLock(_LockContextManager):
-    """
-    A non-exclusive lock on a channel to avoid cleanup while data is
-    being written to mongo. Increments relay_writers (KEYS[6]) during
-    write operation.
-    """
-
-    lock_script = """
-        local state = tonumber(redis.call("GET", KEYS[1])) or 0
-
-        if state == 0 or state == 3 then
-            -- COLD or COOLING, no write should be done
+        if state ~= 2 then
             return 0
         end
 
-        if state == 1 then
-            -- HEATING, wait for finish
-            return -1
-        end
-
-        local lock = tonumber(redis.call("GET", KEYS[6])) or 0
-        if lock < 0 then
-            -- Cleanup, wait for finish
-            return -1
-        end
-
-        -- Increment lock
-        redis.call("INCR", KEYS[6])
-        redis.call("SET", KEYS[6], lock + 1) -- acquire lock
-
+        -- HOT → COOLING
+        redis.call("SET", KEYS[1], 3)
+        redis.call("DEL", KEYS[3])
+        redis.call("SET", KEYS[4], 0)
         return 1
         """
+        await self.connect()
+        fn = self._conn.register_script(script)
+        result = await fn(keys=self.local_keys)
+        return result > 0
 
-    release_script = """
-        redis.call("DECR", KEYS[6])
-        redis.call("PUBLISH", KEYS[7], 1)
-        end
+    async def start_cooling_if_stale(self, ttl):
+        """Atomically transition HOT → COOLING if sessions==0 and TTL expired.
+
+        Returns True if transition occurred, False otherwise.
         """
-
-class CleanupLock(_LockContextManager):
-    """
-    An exclusive lock on a channel to avoid new writes to mongo during
-    cleanup. It sets relay_writers to negative number.
-    """
-
-    lock_script = """
-        -- Set the lock key to 0 to publish to release pub/sub
-        local writers = tonumber(redis.call("GET", KEYS[6])) or 0
-        if writers < 0 then
-            -- Another cleanup job running, do nothing
+        script = """
+        local state = tonumber(redis.call("GET", KEYS[1])) or 0
+        if state ~= 2 then
             return 0
         end
-        if writers == 0 then
-            redis.call("SET", KEYS[6], -1)
-            redis.call("PUBLISH", KEYS[7], 1)
+
+        local sessions = tonumber(redis.call("GET", KEYS[6])) or 0
+        if sessions > 0 then
+            return 0
+        end
+
+        local last_disconnect = tonumber(redis.call("GET", KEYS[7]))
+        if not last_disconnect then
+            return 0
+        end
+
+        local now = tonumber(ARGV[1])
+        local ttl = tonumber(ARGV[2])
+        if (now - last_disconnect) < ttl then
+            return 0
+        end
+
+        -- HOT → COOLING
+        redis.call("SET", KEYS[1], 3)
+        redis.call("DEL", KEYS[3])
+        redis.call("SET", KEYS[4], 0)
+        return 1
+        """
+        await self.connect()
+        now = await self.get_tstamp()
+        fn = self._conn.register_script(script)
+        result = await fn(keys=self.local_keys, args=[now, ttl])
+        return result > 0
+
+    async def finish_cooling(self):
+        """Atomically finish the COOLING process.
+
+        Returns:
+            0 if COOLING → COLD (success, done)
+            1 if state changed to HEATING (client connected, need reheat)
+            -1 if state is unexpected
+        """
+        script = """
+        local state = tonumber(redis.call("GET", KEYS[1])) or 0
+        if state == 3 then
+            -- Still COOLING. Signal end, go COLD.
+            local len = tonumber(redis.call("LLEN", KEYS[3])) or 0
+            if len > 0 then
+                redis.call("PUBLISH", KEYS[5], -len)
+            end
+            redis.call("SET", KEYS[1], 0)
+            redis.call("DEL", KEYS[3])
+            redis.call("SET", KEYS[4], 0)
+            return 0
+        elseif state == 1 then
+            -- HEATING: client connected during COOLING. Signal end, need reheat.
+            local len = tonumber(redis.call("LLEN", KEYS[3])) or 0
+            if len > 0 then
+                redis.call("PUBLISH", KEYS[5], -len)
+            end
             return 1
         end
-
-        -- Someone is writing, wait for release
         return -1
         """
+        await self.connect()
+        fn = self._conn.register_script(script)
+        return await fn(keys=self.local_keys)
 
-    release_script = """
-        redis.call("SET", KEYS[6], 0)
-        redis.call("PUBLISH", KEYS[7], 1)
-        end
-        """

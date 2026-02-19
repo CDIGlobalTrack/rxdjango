@@ -60,6 +60,7 @@ from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
 from .actions import execute_action
 from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
+from .redis import RedisSession
 from rxdjango.serialize import json_dumps
 
 
@@ -229,6 +230,8 @@ class StateConsumer(AsyncWebsocketConsumer):
             anchor_id,
             self.user_id,
         )
+        redis = RedisSession(self.context_channel_class, anchor_id)
+        await redis.session_connect()
 
     async def disconnect_anchor(self, anchor_id: int) -> None:
         """Unsubscribe this consumer from WebSocket updates for the given anchor."""
@@ -238,6 +241,8 @@ class StateConsumer(AsyncWebsocketConsumer):
             anchor_id,
             self.user_id,
         )
+        redis = RedisSession(self.context_channel_class, anchor_id)
+        await redis.session_disconnect()
 
     async def _load_state(self, anchor_id: int) -> None:
         """Load and send initial state for an anchor from MongoDB cache.
@@ -283,6 +288,8 @@ class StateConsumer(AsyncWebsocketConsumer):
                 anchor_id,
                 self.user_id,
             )
+            redis = RedisSession(self.context_channel_class, anchor_id)
+            await redis.session_disconnect()
 
         await self.channel.on_disconnect()
 

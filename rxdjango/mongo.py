@@ -157,6 +157,36 @@ class MongoStateSession:
             )
 
     @staticmethod
+    async def list_and_clear_instances(channel_class, anchor_id):
+        """Yield all instances grouped by instance_type, deleting each group after yielding.
+
+        Used by the COOLING expiry process to migrate data from MongoDB to Redis.
+
+        Args:
+            channel_class: The ContextChannel subclass whose collection to read.
+            anchor_id: The anchor ID whose cached instances to migrate.
+
+        Yields:
+            list[dict]: Batches of instance dicts, one batch per model layer.
+        """
+        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        db = client[settings.MONGO_STATE_DB]
+        collection = db[channel_class.__name__.lower()]
+
+        for model in channel_class._state_model.models():
+            query = {
+                '_anchor_id': anchor_id,
+                '_instance_type': model.instance_type,
+            }
+            instances = []
+            async for instance in collection.find(query):
+                del instance['_id']
+                instances.append(instance)
+            if instances:
+                yield instances
+                await collection.delete_many(query)
+
+    @staticmethod
     async def clear(channel_class, anchor_id):
         """Delete all cached instances for a given channel and anchor.
 
