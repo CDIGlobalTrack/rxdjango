@@ -1,29 +1,4 @@
 {
-  "projectTitle": "RxDjango",
-  "description": "Real-time Django-React integration via WebSockets with automatic state synchronization",
-  "folders": ["rxdjango", "rxdjango-react/src", "docs"],
-  "excludeFolders": [
-    "node_modules",
-    "build",
-    "dist",
-    "__pycache__",
-    "ai_docs",
-    "*.egg-info",
-    "rxdjango-env",
-    "prompts",
-    "_prompts"
-  ],
-  "excludeFiles": [
-    "profile_deltas.py"
-  ],
-  "rules": [
-    "Always use instance.save() - never Model.objects.update() as it bypasses signals",
-    "Serializers must be nested ModelSerializer instances",
-    "Channel files must be named channels.py for auto-discovery",
-    "Run makefrontend after serializer or channel changes",
-    "Authentication uses rest_framework.authtoken.models.Token only",
-    "ContextChannel.has_permission() is called once on connect to check access",
-    "Use @action decorator for RPC methods callable from frontend",
-    "Use @consumer decorator to subscribe to Django Channels groups"
-  ]
+  "url": "https://context7.com/cdiglobaltrack/rxdjango",
+  "public_key": "pk_GL1MNWdiGd2529JAKztu2"
 }
