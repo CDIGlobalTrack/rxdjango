@@ -128,19 +128,17 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         Expected message format::
 
-            {"token": "<rest_framework_auth_token>", "last_update": <timestamp|null>}
+            {"token": "<auth_token>", "lastUpdate": <timestamp|null>}
 
         On success: authenticates user, checks permissions, loads initial state.
         On failure: sends error status and closes connection.
 
         Args:
-            text_data: Parsed JSON dict with 'token' and optional 'last_update' keys.
+            text_data: Parsed JSON dict with 'token' and optional 'lastUpdate' keys.
         """
-        # If user is not logged, we expect credentials
-        # data = json.loads(text_data)
         data = text_data
         token = data.get('token', None)
-        last_update = data.get('last_update', None)
+        last_update = data.get('lastUpdate', None)
 
         user = None
         try:
@@ -208,7 +206,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         }))
 
         for anchor_id in self.anchor_ids:
-            await self._load_state(anchor_id)
+            await self._load_state(anchor_id, tstamp)
 
     async def instances_list_add(self, event: dict[str, Any]) -> None:
         """Handle channel layer event for adding an instance to a many=True list.
@@ -247,13 +245,18 @@ class StateConsumer(AsyncWebsocketConsumer):
         redis = RedisSession(self.context_channel_class, anchor_id)
         await redis.session_disconnect()
 
-    async def _load_state(self, anchor_id: int) -> None:
+    async def _load_state(self, anchor_id: int, last_update: float | None = None) -> None:
         """Load and send initial state for an anchor from MongoDB cache.
 
         Streams state instances to the client in batches, then sends
         an end-of-data marker with the current timestamp.
+
+        Args:
+            anchor_id: The anchor instance ID to load state for.
+            last_update: If provided, only send instances updated after this
+                timestamp (for efficient reconnection).
         """
-        async with StateLoader(self.channel, anchor_id) as loader:
+        async with StateLoader(self.channel, anchor_id, last_update) as loader:
             async for instances in loader.list_instances():
                 if instances:
                     data = json_dumps(instances)

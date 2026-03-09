@@ -59,7 +59,7 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    expect(socket.sent[0]).toBe(JSON.stringify({ token: 'my-token' }));
+    expect(socket.sent[0]).toBe(JSON.stringify({ token: 'my-token', lastUpdate: null }));
   });
 
   it('calls onOpen callback', () => {
@@ -332,5 +332,52 @@ describe('PersistentWebSocket', () => {
     jest.advanceTimersByTime(1000);
     // Should not reconnect
     expect(getSocket(ws)).toBeUndefined();
+  });
+
+  it('tracks lastUpdate from received instances and sends it on reconnect', () => {
+    const ws = createWs('token');
+    ws.connect();
+    jest.runAllTimers();
+
+    const socket1 = getSocket(ws);
+    socket1.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+
+    // Receive instances with _tstamp values; lastUpdate should track the max
+    socket1.onmessage!({ data: JSON.stringify([
+      { id: 1, _instance_type: 'test.Ser', _operation: 'initial_state', _tstamp: 500 },
+      { id: 2, _instance_type: 'test.Ser', _operation: 'initial_state', _tstamp: 700 },
+    ]) });
+
+    // Simulate unclean close to trigger reconnect
+    socket1.onclose!({ wasClean: false } as any);
+    jest.advanceTimersByTime(10);
+
+    // New socket should send lastUpdate: 700 (the maximum _tstamp seen)
+    const socket2 = getSocket(ws);
+    expect(socket2!.sent[0]).toBe(JSON.stringify({ token: 'token', lastUpdate: 700 }));
+  });
+
+  it('resets lastUpdate to null after intentional disconnect', () => {
+    const ws = createWs('token');
+    ws.connect();
+    jest.runAllTimers();
+
+    const socket1 = getSocket(ws);
+    socket1.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+
+    // Receive instance with _tstamp to set lastUpdate
+    socket1.onmessage!({ data: JSON.stringify([
+      { id: 1, _instance_type: 'test.Ser', _operation: 'initial_state', _tstamp: 500 },
+    ]) });
+
+    // Intentional disconnect must reset lastUpdate
+    ws.disconnect('manual-disconnect');
+
+    // Reconnect manually; auth message should have lastUpdate: null
+    ws.connect();
+    jest.runAllTimers();
+
+    const socket2 = getSocket(ws);
+    expect(socket2!.sent[0]).toBe(JSON.stringify({ token: 'token', lastUpdate: null }));
   });
 });

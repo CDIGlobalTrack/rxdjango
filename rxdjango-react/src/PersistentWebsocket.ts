@@ -41,6 +41,7 @@ export default class PersistentWebSocket {
   private authStatusReceived: boolean;
   private timer: NodeJS.Timeout | undefined;
   private reason: keyof typeof preventReconnectionReasons | undefined;
+  private lastUpdate: number | null = null;
 
   public authStatus: AuthStatus | undefined;
 
@@ -89,7 +90,7 @@ export default class PersistentWebSocket {
     this.ws = new WebSocket(this.url, this.protocols);
 
     this.ws.onopen = () => {
-      this.ws!.send(JSON.stringify({ token: this.token }));
+      this.ws!.send(JSON.stringify({ token: this.token, lastUpdate: this.lastUpdate }));
       this.reconnectInterval = this.initialReconnectInterval;
       this.onOpen();
     };
@@ -98,6 +99,11 @@ export default class PersistentWebSocket {
       // Instance arrays are sent as JSON arrays (no type wrapper)
       if (event.data[0] === '[') {
         const instances = JSON.parse(event.data) as TempInstance[];
+        for (const instance of instances) {
+          if (instance._tstamp && instance._tstamp > (this.lastUpdate || 0)) {
+            this.lastUpdate = instance._tstamp;
+          }
+        }
         this.onInstances(instances);
         return;
       }
@@ -191,6 +197,9 @@ export default class PersistentWebSocket {
     }
 
     this.reason = reason;
+    if (reason) {
+      this.lastUpdate = null;
+    }
     this.ws?.close();
     this.ws = undefined;
   }
