@@ -89,10 +89,10 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
 
-    expect(onAuth).toHaveBeenCalledWith({ statusCode: 200 });
-    expect(ws.authStatus).toEqual({ statusCode: 200 });
+    expect(onAuth).toHaveBeenCalledWith({ type: 'auth', statusCode: 200 });
+    expect(ws.authStatus).toEqual({ type: 'auth', statusCode: 200 });
   });
 
   it('calls onConnected for status 200', () => {
@@ -103,7 +103,7 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
 
     expect(onConnected).toHaveBeenCalledTimes(1);
   });
@@ -116,7 +116,7 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 401, error: 'error/unauthorized' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 401, error: 'error/unauthorized' }) });
 
     expect(onError).toHaveBeenCalledWith(expect.any(Error));
     expect(socket.closed).toBe(true);
@@ -131,7 +131,7 @@ describe('PersistentWebSocket', () => {
 
     const socket = getSocket(ws);
     // First message is auth
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
     // Second message is instances (array)
     const instances = [{ id: 1, _instance_type: 'test.Ser', _operation: 'create' }];
     socket.onmessage!({ data: JSON.stringify(instances) });
@@ -147,10 +147,10 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ callId: 42, result: 'ok' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'actionResponse', callId: 42, result: 'ok' }) });
 
-    expect(onAction).toHaveBeenCalledWith({ callId: 42, result: 'ok' });
+    expect(onAction).toHaveBeenCalledWith({ type: 'actionResponse', callId: 42, result: 'ok' });
   });
 
   it('routes runtimeVar messages', () => {
@@ -161,10 +161,10 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ runtimeVar: 'mode', value: 'edit' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'runtimeVar', var: 'mode', value: 'edit' }) });
 
-    expect(onRuntime).toHaveBeenCalledWith({ runtimeVar: 'mode', value: 'edit' });
+    expect(onRuntime).toHaveBeenCalledWith({ type: 'runtimeVar', var: 'mode', value: 'edit' });
   });
 
   it('routes initialAnchors message', () => {
@@ -175,8 +175,8 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ initialAnchors: [1, 2, 3] }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'initialAnchors', anchorIds: [1, 2, 3] }) });
 
     expect(onAnchors).toHaveBeenCalledWith([1, 2, 3]);
   });
@@ -189,8 +189,8 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ initialAnchors: [] }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'initialAnchors', anchorIds: [] }) });
 
     expect(onEmpty).toHaveBeenCalledTimes(1);
   });
@@ -203,8 +203,8 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ prependAnchor: 99 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'prependAnchor', anchorId: 99 }) });
 
     expect(onPrepend).toHaveBeenCalledWith(99);
   });
@@ -217,10 +217,10 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ source: 'system', type: 'maintenance' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'system', source: 'system' }) });
 
-    expect(onSystem).toHaveBeenCalledWith({ source: 'system', type: 'maintenance' });
+    expect(onSystem).toHaveBeenCalledWith({ type: 'system', source: 'system' });
   });
 
   it('triggers reconnect on maintenance message', () => {
@@ -229,8 +229,8 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
-    socket.onmessage!({ data: JSON.stringify({ source: 'maintenance' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'maintenance' }) });
 
     // After maintenance, ws should be cleared for reconnection
     expect(getSocket(ws)).toBeUndefined();
@@ -292,7 +292,7 @@ describe('PersistentWebSocket', () => {
     jest.runAllTimers();
 
     const socket = getSocket(ws);
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
     // Send a plain string (not JSON object or array)
     socket.onmessage!({ data: '"just a string"' });
 
@@ -325,7 +325,7 @@ describe('PersistentWebSocket', () => {
 
     const socket = getSocket(ws);
     // Auth error
-    socket.onmessage!({ data: JSON.stringify({ statusCode: 401, error: 'error/unauthorized' }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 401, error: 'error/unauthorized' }) });
     // Close event fires
     socket.onclose!({ wasClean: true } as any);
 

@@ -201,7 +201,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
 
     async def set_runtime_var(self, var: str, value: Any) -> None:
         self.runtime_state[var] = value
-        payload = {'runtimeVar': var, 'value': value}
+        payload = {'type': 'runtimeVar', 'var': var, 'value': value}
         payload = json.dumps(payload)
         await self.send(text_data=payload)
 

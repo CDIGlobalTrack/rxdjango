@@ -52,11 +52,13 @@ export interface UnloadedInstance extends InstanceType {
 }
 
 export interface AuthStatus {
+  type: 'auth';
   statusCode: number;
   error?: string | null;
 }
 
 export interface SystemMessage {
+  type: 'system' | 'maintenance';
   source: string;
-  type: 'maintenance';
+  message: string;
 }

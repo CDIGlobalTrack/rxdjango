@@ -289,6 +289,7 @@ class WebsocketStateTest(TransactionTestCase):
         await database_sync_to_async(self.job.refresh_from_db)()
 
         self.assertEqual(result, {
+            'type': 'actionResponse',
             'callId': 11,
             'result': {
                 'jobId': self.job.id,
@@ -320,6 +321,7 @@ class WebsocketStateTest(TransactionTestCase):
         )()
 
         self.assertEqual(result, {
+            'type': 'actionResponse',
             'callId': 12,
             'result': {
                 'taskId': created_task.id,
@@ -353,6 +355,7 @@ class WebsocketStateTest(TransactionTestCase):
         )()
 
         self.assertEqual(result, {
+            'type': 'actionResponse',
             'callId': 13,
             'result': {
                 'assetId': asset.id,
@@ -385,6 +388,7 @@ class WebsocketStateTest(TransactionTestCase):
         )()
 
         self.assertEqual(result, {
+            'type': 'actionResponse',
             'callId': 14,
             'result': {
                 'assetId': asset.id,

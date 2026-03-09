@@ -95,62 +95,56 @@ export default class PersistentWebSocket {
     };
 
     this.ws.onmessage = (event) => {
+      // Instance arrays are sent as JSON arrays (no type wrapper)
+      if (event.data[0] === '[') {
+        const instances = JSON.parse(event.data) as TempInstance[];
+        this.onInstances(instances);
+        return;
+      }
+
       const message = JSON.parse(event.data);
 
-      if (message['statusCode'] && message['statusCode'] == 200) {
-        this.onConnected();
-      }
+      switch (message.type) {
+        case 'auth':
+          this.authStatusReceived = true;
+          this.authStatus = message as AuthStatus;
+          this.onAuth(this.authStatus);
+          if (this.authStatus.statusCode === 200) {
+            this.onConnected();
+          } else if (this.authStatus.error) {
+            console.error("Authentication Error:", this.authStatus.error);
+            this.onError(new Error(this.authStatus.error));
+            this.disconnect('authentication-error');
+          }
+          break;
 
-      if (!this.authStatusReceived) {
-        this.authStatusReceived = true;
-        this.authStatus = message as AuthStatus;
-        this.onAuth(this.authStatus);
-        if (this.authStatus.error) {
-          console.error("Authentication Error:", this.authStatus.error);
-          this.onError(new Error(this.authStatus.error));
-          this.disconnect('authentication-error');
-        }
-        return;
-      }
+        case 'initialAnchors':
+          if (message.anchorIds.length > 0) {
+            this.onInitialAnchors(message.anchorIds as number[]);
+          } else {
+            this.onEmpty();
+          }
+          break;
 
-      if (event.data[0] == '[') {
-        this.onInstances(message as TempInstance[]);
-      } else if (event.data[0] != '{') {
-        return;
-      }
+        case 'prependAnchor':
+          this.onAnchorPrepend(message.anchorId as number);
+          break;
 
-      if (message['callId']) {
-        this.onActionResponse(message as ActionResponse<unknown>);
-        return;
-      }
+        case 'actionResponse':
+          this.onActionResponse(message as ActionResponse<unknown>);
+          break;
 
-      if (message['runtimeVar']) {
-        this.onRuntimeStateChange(message);
-        return;
-      }
+        case 'runtimeVar':
+          this.onRuntimeStateChange(message);
+          break;
 
-      if (message['initialAnchors']) {
-        if (message['initialAnchors'].length > 0) {
-          this.onInitialAnchors(message['initialAnchors'] as number[]);
-        } else {
-          this.onEmpty();
-        }
-        return;
-      }
+        case 'system':
+          this.onSystem(message as SystemMessage);
+          break;
 
-      if (message['prependAnchor']) {
-        this.onAnchorPrepend(message['prependAnchor'] as number);
-        return;
-      }
-
-      if (message['source'] == 'system') {
-        this.onSystem(message as SystemMessage);
-        return;
-      }
-
-      if (message['source'] == 'maintenance') {
-        this.persistentReconnect();
-        return;
+        case 'maintenance':
+          this.persistentReconnect();
+          break;
       }
     };
 

@@ -87,8 +87,8 @@ abstract class ContextChannel<T, Y=unknown> {
     };
 
     ws.onRuntimeStateChange = (message) => {
-      const msg = message as { runtimeVar: keyof Y; value: unknown };
-      const runtimeVar = msg.runtimeVar;
+      const msg = message as { type: 'runtimeVar'; var: keyof Y; value: unknown };
+      const runtimeVar = msg.var;
       const value = msg.value;
       this.receiveRuntimeState(runtimeVar, value);
     };

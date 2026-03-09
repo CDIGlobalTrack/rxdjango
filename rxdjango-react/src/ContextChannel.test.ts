@@ -58,7 +58,7 @@ function getSocket(channel: TestChannel): MockWebSocket | undefined {
 
 function simulateAuth(channel: TestChannel) {
   const socket = getSocket(channel)!;
-  socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
+  socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
 }
 
 function simulateMessage(channel: TestChannel, data: any) {
@@ -135,7 +135,7 @@ describe('ContextChannel', () => {
     jest.runAllTimers();
 
     simulateAuth(channel);
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1, name: 'Test' },
     ]);
@@ -163,7 +163,7 @@ describe('ContextChannel', () => {
     expect(actionMsg.params).toEqual(['arg1']);
 
     // Simulate response
-    simulateMessage(channel, { callId: actionMsg.callId, result: { ok: true } });
+    simulateMessage(channel, { type: 'actionResponse', callId: actionMsg.callId, result: { ok: true } });
 
     const result = await promise;
     expect(result).toEqual({ ok: true });
@@ -180,7 +180,7 @@ describe('ContextChannel', () => {
     const socket = getSocket(channel)!;
     const actionMsg = JSON.parse(socket.sent[socket.sent.length - 1]);
 
-    simulateMessage(channel, { callId: actionMsg.callId, error: { code: 500, message: 'boom' } });
+    simulateMessage(channel, { type: 'actionResponse', callId: actionMsg.callId, error: { code: 500, message: 'boom' } });
 
     await expect(promise).rejects.toEqual({ code: 500, message: 'boom' });
   });
@@ -193,7 +193,7 @@ describe('ContextChannel', () => {
     simulateAuth(channel);
 
     // Set up initial state
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1, tasks: [10] },
     ]);
@@ -222,7 +222,7 @@ describe('ContextChannel', () => {
     jest.runAllTimers();
     simulateAuth(channel);
 
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1 },
     ]);
@@ -246,7 +246,7 @@ describe('ContextChannel', () => {
     const runtimeListener = jest.fn();
     channel.subscribeRuntimeState(runtimeListener);
 
-    simulateMessage(channel, { runtimeVar: 'mode', value: 'edit' });
+    simulateMessage(channel, { type: 'runtimeVar', var: 'mode', value: 'edit' });
 
     expect(runtimeListener).toHaveBeenCalledWith(
       expect.objectContaining({ mode: 'edit' })
@@ -300,12 +300,12 @@ describe('ContextChannel', () => {
     jest.runAllTimers();
     simulateAuth(channel);
 
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1, name: 'First' },
     ]);
 
-    simulateMessage(channel, { prependAnchor: 2 });
+    simulateMessage(channel, { type: 'prependAnchor', anchorId: 2 });
     // listener should have been called for the prepend
     expect(listener).toHaveBeenCalled();
   });
@@ -317,7 +317,7 @@ describe('ContextChannel', () => {
     jest.runAllTimers();
     simulateAuth(channel);
 
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1, tasks: [10] },
     ]);
@@ -345,7 +345,7 @@ describe('ContextChannel', () => {
     jest.runAllTimers();
     simulateAuth(channel);
 
-    simulateMessage(channel, { initialAnchors: [1] });
+    simulateMessage(channel, { type: 'initialAnchors', anchorIds: [1] });
     simulateMessage(channel, [
       { id: 1, _instance_type: 'test.ProjectSerializer', _operation: 'initial_state', _tstamp: 1 },
     ]);
@@ -368,12 +368,12 @@ describe('ContextChannel', () => {
     const runtimeListener = jest.fn();
     const unsub = channel.subscribeRuntimeState(runtimeListener);
 
-    simulateMessage(channel, { runtimeVar: 'mode', value: 'edit' });
+    simulateMessage(channel, { type: 'runtimeVar', var: 'mode', value: 'edit' });
     expect(runtimeListener).toHaveBeenCalledTimes(1);
 
     unsub();
 
-    simulateMessage(channel, { runtimeVar: 'mode', value: 'view' });
+    simulateMessage(channel, { type: 'runtimeVar', var: 'mode', value: 'view' });
     expect(runtimeListener).toHaveBeenCalledTimes(1); // not called again
   });
 
@@ -385,7 +385,7 @@ describe('ContextChannel', () => {
     simulateAuth(channel);
 
     const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-    simulateMessage(channel, { callId: 99999, result: 'orphan' });
+    simulateMessage(channel, { type: 'actionResponse', callId: 99999, result: 'orphan' });
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('99999'));
     consoleSpy.mockRestore();
   });
