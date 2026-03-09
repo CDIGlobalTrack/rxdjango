@@ -203,7 +203,7 @@ class TestStateConsumer:
         kwargs = consumer.send.await_args.kwargs
         assert kwargs['close'] is True
         assert json.loads(kwargs['text_data']) == {
-            'status_code': 401,
+            'statusCode': 401,
             'error': 'error/unauthorized',
         }
 

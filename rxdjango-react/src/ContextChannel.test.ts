@@ -58,7 +58,7 @@ function getSocket(channel: TestChannel): MockWebSocket | undefined {
 
 function simulateAuth(channel: TestChannel) {
   const socket = getSocket(channel)!;
-  socket.onmessage!({ data: JSON.stringify({ status_code: 200 }) });
+  socket.onmessage!({ data: JSON.stringify({ statusCode: 200 }) });
 }
 
 function simulateMessage(channel: TestChannel, data: any) {

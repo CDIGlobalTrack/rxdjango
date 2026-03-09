@@ -181,7 +181,7 @@ class WebsocketStateTest(TransactionTestCase):
         # Should receive status 200
         response = await ws.receive_output(timeout=T)
         data = json.loads(response['text'])
-        self.assertEqual(data['status_code'], 200)
+        self.assertEqual(data['statusCode'], 200)
 
         await self.safe_disconnect(ws)
 
@@ -193,7 +193,7 @@ class WebsocketStateTest(TransactionTestCase):
 
         response = await ws.receive_output(timeout=T)
         data = json.loads(response['text'])
-        self.assertEqual(data['status_code'], 401)
+        self.assertEqual(data['statusCode'], 401)
 
     async def test_initial_state_contains_anchor(self):
         """The anchor (job) should be in initial state."""

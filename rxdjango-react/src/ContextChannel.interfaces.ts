@@ -52,7 +52,7 @@ export interface UnloadedInstance extends InstanceType {
 }
 
 export interface AuthStatus {
-  status_code: number;
+  statusCode: number;
   error?: string | null;
 }
 

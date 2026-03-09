@@ -24,8 +24,8 @@ Incoming messages (client -> server)::
 Outgoing messages (server -> client)::
 
     # Connection status
-    {"status_code": 200}
-    {"status_code": 401, "error": "error/unauthorized"}
+    {"statusCode": 200}
+    {"statusCode": 401, "error": "error/unauthorized"}
 
     # Initial anchor list
     {"initialAnchors": [1, 2, 3]}
@@ -361,7 +361,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             error: Optional error string. If provided, the connection is closed.
         """
         data = {}
-        data['status_code'] = status_code
+        data['statusCode'] = status_code
         if error:
             data['error'] = error
         text_data = json_dumps(data)

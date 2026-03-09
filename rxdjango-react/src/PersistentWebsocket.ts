@@ -97,7 +97,7 @@ export default class PersistentWebSocket {
     this.ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
 
-      if (message['status_code'] && message['status_code'] == 200) {
+      if (message['statusCode'] && message['statusCode'] == 200) {
         this.onConnected();
       }
 
