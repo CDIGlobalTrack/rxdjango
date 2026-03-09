@@ -334,6 +334,25 @@ describe('PersistentWebSocket', () => {
     expect(getSocket(ws)).toBeUndefined();
   });
 
+  it('logs warning for unknown message type in development', () => {
+    const ws = createWs();
+    ws.connect();
+    jest.runAllTimers();
+
+    const socket = getSocket(ws);
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation();
+    socket.onmessage!({ data: JSON.stringify({ type: 'unknownType', payload: 42 }) });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'RxDjango: Unknown message type:',
+      'unknownType',
+      expect.objectContaining({ type: 'unknownType' }),
+    );
+    warnSpy.mockRestore();
+  });
+
   it('tracks lastUpdate from received instances and sends it on reconnect', () => {
     const ws = createWs('token');
     ws.connect();
@@ -350,7 +369,8 @@ describe('PersistentWebSocket', () => {
 
     // Simulate unclean close to trigger reconnect
     socket1.onclose!({ wasClean: false } as any);
-    jest.advanceTimersByTime(10);
+    jest.advanceTimersByTime(10); // fire reconnect timer
+    jest.runAllTimers();          // fire new socket's onopen (0ms setTimeout)
 
     // New socket should send lastUpdate: 700 (the maximum _tstamp seen)
     const socket2 = getSocket(ws);

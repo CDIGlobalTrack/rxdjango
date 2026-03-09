@@ -151,6 +151,12 @@ export default class PersistentWebSocket {
         case 'maintenance':
           this.persistentReconnect();
           break;
+
+        default:
+          if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+            console.warn('RxDjango: Unknown message type:', message.type, message);
+          }
+          break;
       }
     };
 

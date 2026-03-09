@@ -7,8 +7,6 @@ for efficient WebSocket reconnection.
 import asyncio
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 def _run(coro):
     """Run an async coroutine in a fresh event loop."""

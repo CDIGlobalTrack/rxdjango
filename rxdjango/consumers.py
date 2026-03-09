@@ -138,6 +138,10 @@ class StateConsumer(AsyncWebsocketConsumer):
         """
         data = text_data
         token = data.get('token', None)
+        if token is None:
+            await self.send_connection_status(400, 'error/missing-token')
+            await self.close()
+            return
         last_update = data.get('lastUpdate', None)
 
         user = None
@@ -353,9 +357,34 @@ class StateConsumer(AsyncWebsocketConsumer):
         Args:
             action: Parsed JSON dict with 'callId', 'action', and 'params' keys.
         """
-        method_name = action.pop('action')
-        call_id = action['callId']
-        params = action.pop('params')
+        call_id = action.get('callId')
+        method_name = action.get('action')
+        params = action.get('params')
+
+        if call_id is None or method_name is None or params is None:
+            if call_id is not None:
+                response = {
+                    'type': 'actionResponse',
+                    'callId': call_id,
+                    'error': {
+                        'code': 400,
+                        'message': 'Invalid action message: requires callId, action, and params fields',
+                    },
+                }
+                await self.send(text_data=json.dumps(response))
+            return
+
+        if not isinstance(params, list):
+            response = {
+                'type': 'actionResponse',
+                'callId': call_id,
+                'error': {
+                    'code': 400,
+                    'message': 'params must be an array',
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+            return
 
         try:
             result = await execute_action(self.channel, method_name, params)

@@ -377,6 +377,26 @@ describe('ContextChannel', () => {
     expect(runtimeListener).toHaveBeenCalledTimes(1); // not called again
   });
 
+  it('callAction rejects when response has neither result nor error', async () => {
+    const channel = new TestChannel('token');
+    channel.setArgs({ projectId: 1 });
+    channel.subscribe(jest.fn());
+    jest.runAllTimers();
+    simulateAuth(channel);
+
+    const promise = (channel as any).callAction('doSomething', []);
+    const socket = getSocket(channel)!;
+    const actionMsg = JSON.parse(socket.sent[socket.sent.length - 1]);
+
+    // Send a response that has neither result nor error
+    simulateMessage(channel, { type: 'actionResponse', callId: actionMsg.callId });
+
+    await expect(promise).rejects.toEqual({
+      code: 500,
+      message: 'Malformed action response: missing both result and error',
+    });
+  });
+
   it('receiveActionResponse logs error for unmatched callId', () => {
     const channel = new TestChannel('token');
     channel.setArgs({ projectId: 1 });
