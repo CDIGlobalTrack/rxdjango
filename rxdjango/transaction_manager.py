@@ -121,6 +121,13 @@ class TransactionBroadcastManager:
             pending_broadcast: PendingBroadcast containing instance info
         """
         state = cls._get_state()
+        connection = transaction.get_connection()
+
+        # A rolled-back transaction never runs the registered on_commit hook.
+        # If we are now outside an atomic block, any retained pending state is stale.
+        if (state.pending or state.registered) and not connection.in_atomic_block:
+            cls._clear()
+            state = cls._get_state()
 
         # Key by (handler_name, instance_type, instance_id)
         # This ensures deduplication per channel and per instance

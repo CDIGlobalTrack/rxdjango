@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -e .
+          pip install pytest pytest-asyncio
+
+      - name: Run unit tests
+        run: pytest rxdjango/tests/
+
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install Pillow
+          pip install -e .
+
+      - name: Run integration tests
+        working-directory: test_project
+        run: python manage.py test react_test.tests
+
+  frontend-tests:
+    name: Frontend Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: rxdjango-react/yarn.lock
+
+      - name: Install dependencies
+        working-directory: rxdjango-react
+        run: yarn install
+
+      - name: Run tests
+        working-directory: rxdjango-react
+        run: yarn test --ci
+
+  frontend-lint:
+    name: Frontend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: rxdjango-react/yarn.lock
+
+      - name: Install dependencies
+        working-directory: rxdjango-react
+        run: yarn install
+
+      - name: Lint
+        working-directory: rxdjango-react
+        run: npm run lint
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: rxdjango-react/yarn.lock
+
+      - name: Install dependencies
+        working-directory: rxdjango-react
+        run: yarn install
+
+      - name: Build
+        working-directory: rxdjango-react
+        run: yarn build
+
+  backend-lint:
+    name: Backend Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install flake8
+        run: pip install flake8
+
+      - name: Lint
+        run: flake8 --ignore=E501,W504 rxdjango

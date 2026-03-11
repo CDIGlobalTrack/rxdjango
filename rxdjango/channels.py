@@ -20,6 +20,7 @@ from .redis import RedisStateSession
 from .mongo import MongoStateSession
 from .serialize import json_dumps
 
+
 class ContextChannelMeta(type):
     """Metaclass for the ContextChannel.
 
@@ -83,7 +84,6 @@ class ContextChannelMeta(type):
             # Add _rx boolean field to model to filter active_channels
             module = new_class.__module__.replace('.', '_').lower()
             active_flag = f'_rx_{module}_{new_class.__name__.lower()}'
-            model = anchor.Meta.model
             anchor.Meta.model.add_to_class(
                 active_flag,
                 models.BooleanField(null=True, default=False, db_index=True),
@@ -181,7 +181,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
     async def list_instances(self, **kwargs: Any) -> QuerySet:
         """Subclass must implement this if serializer has many=True parameter.
         Returns a queryset"""
-        raise NotImplemented
+        raise NotImplementedError
 
     async def add_instance(self, instance_id: int, at_beginning: bool = False) -> None:
         if instance_id in self.anchor_index:
@@ -201,7 +201,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
 
     async def set_runtime_var(self, var: str, value: Any) -> None:
         self.runtime_state[var] = value
-        payload = { 'runtimeVar': var, 'value': value }
+        payload = {'runtimeVar': var, 'value': value}
         payload = json.dumps(payload)
         await self.send(text_data=payload)
 

@@ -67,8 +67,6 @@ async def scan_stale_anchors():
 
     stale = []
     for channel_class in ContextChannel.get_registered_channels():
-        ttl = channel_class.get_cache_ttl()
-
         anchor_ids = await _scan_anchor_ids(channel_class)
         for anchor_id in anchor_ids:
             redis_session = RedisStateSession(channel_class, anchor_id)

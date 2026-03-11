@@ -210,7 +210,7 @@ abstract class ContextChannel<T, Y=unknown> {
     try {
       const instance = this.builder!.getInstance(key);
       this.notifyInstance(instance);
-    } catch (e) {
+    } catch (_e) {
       return unsubscribe;
     }
 
@@ -228,7 +228,7 @@ abstract class ContextChannel<T, Y=unknown> {
     const key = `${instance_type}:${instance_id}`;
     try {
       return this.builder!.getInstance(key) as Y;
-    } catch (err) {
+    } catch (_err) {
       return null;
     }
   }

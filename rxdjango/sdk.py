@@ -14,7 +14,7 @@ def make_sdk(apply_changes=True, quiet=False, force=False):
             print(msg)
 
     models = apps.get_models()
-    installed_apps = list(set([ x.__module__.split('.')[0] for x in models]))
+    installed_apps = list(set([x.__module__.split('.')[0] for x in models]))
 
     changed = False
 

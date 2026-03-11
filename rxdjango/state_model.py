@@ -4,13 +4,13 @@ from collections import defaultdict
 from typing import Any, Generator, Iterator
 
 from rest_framework import serializers
-from django.db import models, connection
 from django.db import ProgrammingError
 from django.db.models import Model
 from django.db.models.fields import related_descriptors
 from .ts import export_interface
 from .exceptions import UnknownProperty
 from .related_properties import is_related_property, get_accessor, get_reverse_accessor
+
 
 class StateModel:
     """The StateModel is constructed based on a nested serializers.ModelSerializer
@@ -53,8 +53,8 @@ class StateModel:
             self.nested_serializer.__module__,
             self.nested_serializer.__class__.__name__,
         ])
-        #modu = self.nested_serializer.__module__.replace('.serializers', '')
-        #print(f"""perl -pi -e "s/instance_type === '{modu}.{self.model.__name__}/instance_type === '{self.instance_type}/" $1""")
+        # modu = self.nested_serializer.__module__.replace('.serializers', '')
+        # print(f"""perl -pi -e "s/instance_type === '{modu}.{self.model.__name__}/instance_type === '{self.instance_type}/" $1""")
 
         self.index[self.instance_type].append(self)
 
@@ -84,8 +84,8 @@ class StateModel:
         return self.children[key]
 
     def models(self) -> Iterator[StateModel]:
-        for models in self.index.values():
-            for model in models:
+        for nodes in self.index.values():
+            for model in nodes:
                 yield model
 
     def frontend_model(self) -> dict[str, dict[str, str]]:
@@ -136,7 +136,7 @@ class StateModel:
             data = self.flat_serializer(instance.all(), many=True).data
             instances = instance.all()
         else:
-            data = [ self.flat_serializer(instance).data ]
+            data = [self.flat_serializer(instance).data]
             instances = [instance]
 
         for serialized in data:

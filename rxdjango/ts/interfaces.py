@@ -1,11 +1,11 @@
 import os
 import typing
 import importlib
-from django.utils import timezone
 from django.db.models.fields import related_descriptors
 from django.conf import settings
 from rest_framework import serializers, relations, fields
 from . import ts_exported, header, interface_name, get_ts_type, diff
+
 
 def create_app_interfaces(app, apply_changes=True, force=False):
     serializer_module_name = f'{app}.serializers'
@@ -44,7 +44,7 @@ def create_app_interfaces(app, apply_changes=True, force=False):
 
     initial_length = len(code)
 
-    code.append(f"import {{ InstanceType }} from '@rxdjango/react';\n")
+    code.append("import { InstanceType } from '@rxdjango/react';\n")
 
     imports = []
     for external_app, dependencies in serializers.items():
@@ -104,6 +104,7 @@ def get_serializers(module):
             apps[app] = [klass]
     return apps
 
+
 def _get_serializer_classes(module):
     for name, klass in module.__dict__.items():
         try:
@@ -111,6 +112,7 @@ def _get_serializer_classes(module):
                 yield klass
         except TypeError:
             pass
+
 
 mappings = {
     serializers.BooleanField: 'boolean',
@@ -170,11 +172,11 @@ def __process_field(field_name, field, serializer):
             else:
                 ts_type = 'any'
 
-
     if is_many:
         ts_type += '[]'
 
     return (field_name, ts_type)
+
 
 def __get_function_type(func):
     hints = typing.get_type_hints(func)
@@ -185,6 +187,7 @@ def __get_function_type(func):
 
     return get_ts_type(ftype)
 
+
 def __map_choices_to_union(field_type, choices):
     '''
     Generates and returns a TS union type for all values in the provided choices OrderedDict
@@ -192,7 +195,7 @@ def __map_choices_to_union(field_type, choices):
     if not choices:
         return 'any'
 
-    return ' | '.join(f'"{key}"' if type(key) == str else str(key) for key in choices.keys())
+    return ' | '.join(f'"{key}"' if isinstance(key, str) else str(key) for key in choices.keys())
 
 
 def serialize_type(serializer):

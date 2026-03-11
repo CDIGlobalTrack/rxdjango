@@ -10,7 +10,7 @@ import {
   UserType,
 } from './StateBuilder.mock'
 
-const header = <T>(
+const header = (
   instanceType: string,
   id: number,
   operation: string = 'create',

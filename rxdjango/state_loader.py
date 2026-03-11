@@ -1,12 +1,11 @@
 import asyncio
-from asgiref.sync import sync_to_async
 from channels.db import database_sync_to_async
 from django.conf import settings
 from .redis import RedisStateSession
 from .mongo import MongoStateSession
 from .exceptions import AnchorDoesNotExist
 
-if settings.DEBUG or settings.TESTING:
+if settings.DEBUG or getattr(settings, 'TESTING', False):
     def mark(instances, cache_state):
         if instances:
             instances[0]['_cache_state'] = cache_state
@@ -98,7 +97,7 @@ class StateLoader:
         Anchor = self.state_model.model
         active_flag = self.state_model.active_flag
         if active_flag:
-            kwargs = { active_flag: True }
+            kwargs = {active_flag: True}
             Anchor.objects.filter(id=self.anchor_id).update(**kwargs)
         try:
             return Anchor.objects.get(id=self.anchor_id)

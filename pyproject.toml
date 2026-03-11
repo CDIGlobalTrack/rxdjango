@@ -47,3 +47,18 @@ include = ["rxdjango*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.c", "*.h"]
+
+[tool.pytest.ini_options]
+# Unit tests (no external services needed)
+testpaths = ["rxdjango/tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+# Integration tests (require Redis, MongoDB, Django DB) run via:
+#   cd test_project && python manage.py test react_test.tests
+# or:
+#   pytest test_project/ --ds=test_project.settings
+
+[tool.pytest.ini_options.markers]
+django = "Tests requiring Django setup"

@@ -9,7 +9,8 @@
     "test:watch": "jest src --watch",
     "test:debug": "node --inspect-brk node_modules/.bin/jest --runInBand src",
     "dev": "tsc -p tsconfig.json --watch",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src"
   },
   "repository": {
     "type": "git",
@@ -28,6 +29,9 @@
   "devDependencies": {
     "@types/react": "^18.2.24",
     "@types/react-dom": "^18.2.8",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
     "ts-jest": "^29.1.2",
     "ts-node": "^10.9.1",
     "tsup": "^7.2.0",

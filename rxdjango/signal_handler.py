@@ -116,6 +116,18 @@ class SignalHandler:
     def _connect_layer(self, layer: Any) -> None:
         """Register signals for models of this layer"""
 
+        def _resolve_parent(_layer, instance):
+            if not _layer.origin or not _layer.reverse_acessor:
+                return None
+
+            parent = instance
+            for reverse_acessor in _layer.reverse_acessor.split('.'):
+                parent = getattr(parent, reverse_acessor, None)
+                if parent is None:
+                    return None
+
+            return parent
+
         def prepare_save(sender, instance, **kwargs):
             # Check if this instance has changed parent
             # If so we need to relay the old and new parent
@@ -124,11 +136,11 @@ class SignalHandler:
             try:
                 current = sender.objects.get(pk=instance.pk or instance.id)
             except sender.DoesNotExist:
-                return # Should not happen, but who knows
+                return  # Should not happen, but who knows
             acessor = layer.reverse_acessor
             try:
                 old_parent = getattr(current, acessor)
-            except AttributeError as e:
+            except AttributeError:
                 # This is a bug in RxDjango.
                 # While we don't fix it, let's not break things
                 return
@@ -221,6 +233,10 @@ class SignalHandler:
                 anchors = layer.get_anchors(serialized)
                 instance._anchors = list(anchors)
                 instance._serialized = serialized
+                if layer.origin and layer.reverse_acessor:
+                    if not hasattr(instance, '_delete_parents'):
+                        instance._delete_parents = {}
+                    instance._delete_parents[layer] = _resolve_parent(layer, instance)
 
         def relay_delete_instance(sender, instance, **kwargs):
             """
@@ -232,6 +248,9 @@ class SignalHandler:
             if sender is layer.model:
                 serialized = instance._serialized
                 anchors = instance._anchors
+                parent = None
+                if layer.origin and layer.reverse_acessor:
+                    parent = getattr(instance, '_delete_parents', {}).get(layer)
 
                 if transaction.get_autocommit():
                     # No transaction - relay immediately
@@ -249,6 +268,9 @@ class SignalHandler:
                         delete_serialized=serialized,
                     )
                     TransactionBroadcastManager.add(self, pending)
+
+                if parent:
+                    _schedule_instance(layer.origin, parent, 'update')
 
         uid = '-'.join(['cache', self.name] + layer.instance_path)
 
@@ -297,6 +319,7 @@ class SignalHandler:
                     'instance_id': instance.id,
                 },
             )
+
         def remove_from_list(sender, instance, **kwargs):
             if sender is not anchor_model:
                 return

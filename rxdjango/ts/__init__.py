@@ -25,6 +25,7 @@ TYPEMAP = {
     dict: '{ [key: string]: string }',
 }
 
+
 def interface_name(Serializer):
     return Serializer.__name__.replace('Serializer', 'Type')
 
@@ -44,6 +45,7 @@ def ts_exported(Serializer) -> bool:
 def _key(Serializer):
     return '.'.join([Serializer.__module__, Serializer.__name__])
 
+
 def header(app, *middle):
     now = timezone.now().strftime('%Y-%m-%d %H:%M')
     tz = timezone.now().tzinfo
@@ -55,7 +57,7 @@ def header(app, *middle):
     ]
 
     footer = [
-        f' * To rebuild it, run:',
+        ' * To rebuild it, run:',
         f' *     ./manage.py makefrontend [{app}]',
     ]
 
@@ -127,12 +129,12 @@ def _git_relative_path(filepath):
 
 
 def get_ts_type(ftype):
-    if type(ftype) is types.UnionType :
+    if type(ftype) is types.UnionType:
         py_types = typing.get_args(ftype)
     else:
         py_types = [ftype]
 
-    ts_types = [ TYPEMAP[typ] for typ in py_types ]
+    ts_types = [TYPEMAP[typ] for typ in py_types]
     return ' | '.join(ts_types)
 
 

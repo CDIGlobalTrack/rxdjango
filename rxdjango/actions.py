@@ -1,8 +1,6 @@
 import asyncio
 import typing
-import inspect
 from datetime import datetime
-from collections import defaultdict
 from .exceptions import ForbiddenError, ActionNotAsync
 
 # A set of references for registered actions, so to protect non-action methods
@@ -75,5 +73,5 @@ def _verify_method(method):
         method = method.__func__
     while getattr(method, '__wrapped__', None):
         method = method.__wrapped__
-    if not method in __actions:
+    if method not in __actions:
         raise ForbiddenError

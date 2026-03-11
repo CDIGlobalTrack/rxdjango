@@ -1,12 +1,10 @@
-import sys
 import asyncio
 from django.core.management.base import BaseCommand
-from rxdjango.sdk import make_sdk
 from rxdjango.websocket_router import send_system_message
 
 
 class Command(BaseCommand):
-    help="Broadcast a system message to all connected clients"
+    help = "Broadcast a system message to all connected clients"
 
     def add_arguments(self, parser):
         parser.add_argument('source',

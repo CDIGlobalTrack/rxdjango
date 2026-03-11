@@ -1,6 +1,8 @@
 RxDjango
 ========
 
+[![CI](https://github.com/CDIGlobalTrack/rxdjango/actions/workflows/ci.yml/badge.svg)](https://github.com/CDIGlobalTrack/rxdjango/actions/workflows/ci.yml)
+
 **Seamless integration between Django and React**
 
 RxDjango is a layer over Django Channels and Django REST Framework aimed
