@@ -100,6 +100,11 @@ class TestTransactionBroadcastManager(unittest.TestCase):
         """Clear pending broadcasts after each test."""
         TransactionBroadcastManager._clear()
 
+    def _in_atomic_block(self):
+        connection = Mock()
+        connection.in_atomic_block = True
+        return patch.object(transaction, 'get_connection', return_value=connection)
+
     def test_deduplication_same_instance(self):
         """Multiple adds for same instance should keep only the last one."""
         mock_handler = Mock()
@@ -124,9 +129,10 @@ class TestTransactionBroadcastManager(unittest.TestCase):
             operation='update',
         )
 
-        with patch.object(transaction, 'on_commit'):
-            TransactionBroadcastManager.add(mock_handler, pending1)
-            TransactionBroadcastManager.add(mock_handler, pending2)
+        with self._in_atomic_block():
+            with patch.object(transaction, 'on_commit'):
+                TransactionBroadcastManager.add(mock_handler, pending1)
+                TransactionBroadcastManager.add(mock_handler, pending2)
 
         # Should only have one pending broadcast
         assert TransactionBroadcastManager.pending_count() == 1
@@ -153,9 +159,10 @@ class TestTransactionBroadcastManager(unittest.TestCase):
             operation='update',
         )
 
-        with patch.object(transaction, 'on_commit'):
-            TransactionBroadcastManager.add(mock_handler, pending1)
-            TransactionBroadcastManager.add(mock_handler, pending2)
+        with self._in_atomic_block():
+            with patch.object(transaction, 'on_commit'):
+                TransactionBroadcastManager.add(mock_handler, pending1)
+                TransactionBroadcastManager.add(mock_handler, pending2)
 
         # Should have two pending broadcasts
         assert TransactionBroadcastManager.pending_count() == 2
@@ -182,11 +189,49 @@ class TestTransactionBroadcastManager(unittest.TestCase):
             operation='update',
         )
 
-        with patch.object(transaction, 'on_commit') as mock_on_commit:
-            TransactionBroadcastManager.add(mock_handler, pending1)
-            TransactionBroadcastManager.add(mock_handler, pending2)
+        with self._in_atomic_block():
+            with patch.object(transaction, 'on_commit') as mock_on_commit:
+                TransactionBroadcastManager.add(mock_handler, pending1)
+                TransactionBroadcastManager.add(mock_handler, pending2)
 
         # on_commit should be called only once
+        mock_on_commit.assert_called_once()
+
+    def test_stale_pending_is_cleared_outside_atomic_block(self):
+        """Rolled-back transaction leftovers should not poison later adds."""
+        mock_handler = Mock()
+        mock_handler.name = 'test_channel'
+
+        stale_state_model = Mock()
+        stale_state_model.instance_type = 'test.StaleSerializer'
+        fresh_state_model = Mock()
+        fresh_state_model.instance_type = 'test.FreshSerializer'
+
+        stale_pending = PendingBroadcast(
+            model_class=Mock,
+            instance_id=1,
+            state_model=stale_state_model,
+            operation='update',
+        )
+        fresh_pending = PendingBroadcast(
+            model_class=Mock,
+            instance_id=2,
+            state_model=fresh_state_model,
+            operation='update',
+        )
+
+        state = TransactionBroadcastManager._get_state()
+        state.pending[('stale', 'test.StaleSerializer', 1)] = stale_pending
+        state.handlers['stale'] = mock_handler
+        state.registered = True
+
+        with patch.object(transaction, 'on_commit') as mock_on_commit:
+            TransactionBroadcastManager.add(mock_handler, fresh_pending)
+
+        assert TransactionBroadcastManager.pending_count() == 1
+        state = TransactionBroadcastManager._get_state()
+        key = ('test_channel', 'test.FreshSerializer', 2)
+        assert key in state.pending
         mock_on_commit.assert_called_once()
 
 

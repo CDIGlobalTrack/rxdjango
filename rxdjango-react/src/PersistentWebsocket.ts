@@ -198,5 +198,6 @@ export default class PersistentWebSocket {
 
     this.reason = reason;
     this.ws?.close();
+    this.ws = undefined;
   }
 }

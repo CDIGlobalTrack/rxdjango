@@ -4,8 +4,10 @@ dist
 rxdjango.egg-info
 node_modules
 rxdjango-react/node_modules
-
 rxdjango-react/dist
-
 *~
 .#*
+dist
+*.pyc
+__pycache__
+db.sqlite3

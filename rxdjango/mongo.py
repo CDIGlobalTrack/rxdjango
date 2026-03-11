@@ -17,7 +17,7 @@ in GridFS and referenced via a ``_grid_ref`` field.
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from copy import copy
 from decimal import Decimal
 import pymongo
@@ -265,6 +265,7 @@ class MongoSignalWriter:
                 ('id', pymongo.ASCENDING),
             ],
             name='instance_pkey',
+            unique=True,
         )
 
         self.collection.create_index(
@@ -308,14 +309,13 @@ class MongoSignalWriter:
             instance['_anchor_id'] = anchor_id
             assert instance['_tstamp']
             try:
-                original = self.collection.find_one_and_update(
+                original = self.collection.find_one_and_replace(
                     {
                         '_anchor_id': anchor_id,
                         '_instance_type': instance['_instance_type'],
                         'id': instance['id'],
-                    }, {
-                        '$set': instance,
                     },
+                    instance,
                     upsert=True,
                 )
                 if original:
@@ -372,7 +372,9 @@ def _adapt(instance):
         if isinstance(value, Decimal):
             value = float(value)
         elif isinstance(value, datetime):
-            value = value.isoformat()[:26] + 'Z'
+            if value.tzinfo is not None:
+                value = value.astimezone(timezone.utc)
+            value = value.replace(tzinfo=None).isoformat(timespec='microseconds') + 'Z'
         adapted[key] = value
 
     return adapted

@@ -6,7 +6,7 @@ from .redis import RedisStateSession
 from .mongo import MongoStateSession
 from .exceptions import AnchorDoesNotExist
 
-if settings.DEBUG or settings.TESTING:
+if settings.DEBUG or getattr(settings, 'TESTING', False):
     def mark(instances, cache_state):
         if instances:
             instances[0]['_cache_state'] = cache_state

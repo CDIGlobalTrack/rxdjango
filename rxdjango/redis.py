@@ -475,4 +475,3 @@ class RedisStateSession(RedisSession):
         await self.connect()
         fn = self._conn.register_script(script)
         return await fn(keys=self.local_keys)
-
