@@ -4,12 +4,12 @@ import json
 import typing
 from collections import defaultdict
 from channels.routing import ProtocolTypeRouter, URLRouter
-from django.urls import URLPattern, URLResolver
 from django.conf import settings
 from rxdjango.consumers import StateConsumer
 from rxdjango.actions import list_actions
 from . import (header, interface_name, diff, get_ts_type, snake_to_camel,
                TYPEMAP)
+
 
 def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
@@ -40,7 +40,7 @@ def create_app_channels(app, apply_changes=True, force=False):
     )
 
     code.extend([
-        f"import {{ ContextChannel }} from '@rxdjango/react';\n",
+        "import { ContextChannel } from '@rxdjango/react';\n",
         f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
@@ -50,7 +50,6 @@ def create_app_channels(app, apply_changes=True, force=False):
     for urlpattern in consumer_urlpatterns:
         consumer_class = urlpattern.callback.consumer_class
         context_channel_class = consumer_class.context_channel_class
-        class_name = context_channel_class.__name__
         class_code = generate_ts_class(context_channel_class, urlpattern, import_types)
         body.append('\n')
         body.extend(class_code)
@@ -123,7 +122,7 @@ def list_consumer_patterns(app_name, pattern_list=None, router=None):
                not issubclass(callback.consumer_class, StateConsumer):
                 continue
 
-            context_channel_class =  callback.consumer_class.context_channel_class
+            context_channel_class = callback.consumer_class.context_channel_class
 
             if context_channel_class.__module__.startswith(f'{app_name}.'):
                 pattern_list.append(route)
@@ -158,15 +157,17 @@ def pattern_to_ts(urlpattern):
 
     return endpoint, parameters
 
+
 def build_imports(serializers, this_app):
     code = []
     for app, app_serializers in serializers.items():
-        interfaces = [ interface_name(seri) for seri in app_serializers ]
+        interfaces = [interface_name(seri) for seri in app_serializers]
         interfaces = ', '.join(sorted(interfaces))
         path = '.' if app == this_app else f'../{app}'
         code.append(f"import {{ {interfaces} }} from '{path}/{app}.interfaces.d';")
 
     return code
+
 
 def generate_ts_class(context_channel_class, urlpattern, import_types):
     # First, we get the endpoint pattern and the parameters from our previous function
@@ -202,7 +203,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
         f"export class {name} extends ContextChannel<{types}> {{\n",
         f"  anchor = '{anchor_module}.{anchor_name}';",
         f"  endpoint: string = '{endpoint}';",
-        f"  args: {{ [key: string]: number | string }} = {{}};",
+        "  args: { [key: string]: number | string } = {};",
         f"  many = {many};",
     ]
 
@@ -223,9 +224,9 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
             "}\n"
         ] + code
     else:
-        code.append(f'  runtimeState = null;')
+        code.append('  runtimeState = null;')
 
-    code.append(f'  baseURL: string = SOCKET_URL;\n')
+    code.append('  baseURL: string = SOCKET_URL;\n')
 
     # Constructor
     params = ', '.join([f"{key}: {ts_type}"
@@ -234,9 +235,9 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     params = f'{params}, token: string' if params else 'token: string'
 
     code.append(f"  constructor({params}) {{")
-    code.append(f"    super(token);")
+    code.append("    super(token);")
     code.extend([f"    this.args['{key}'] = {key};" for key in parameters])
-    code.append(f"  }}")
+    code.append("  }}")
 
     code.append('')
 
@@ -249,14 +250,14 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
         return_type = hints.pop('return', type(None))
         return_type = get_ts_type(return_type)
 
-        params = [ f'{k}: {get_ts_type(v)}' for k, v in hints.items() ]
+        params = [f'{k}: {get_ts_type(v)}' for k, v in hints.items()]
         params = ', '.join(params)
 
         call_params = ', '.join(list(hints.keys()))
 
         code.append(f"  public async {camel_action}({params}): Promise<{return_type}> {{")
         code.append(f"    return await this.callAction('{action.__name__}', [{call_params}]);")
-        code.append(f"  }}")
+        code.append("  }}")
 
         code.append('')
 
@@ -265,6 +266,6 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     indented = "\n".join("  " + line for line in model_code.splitlines())
     code.append(f'  model = {indented[2:]};')
 
-    code.append(f"}}")
+    code.append("}")
 
     return code

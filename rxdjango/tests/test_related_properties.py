@@ -68,7 +68,7 @@ class TestRelatedProperty:
             __module__ = 'test_rp.models'
             __name__ = 'TestModel'
 
-        rp = RelatedProperty(accessor='project__tasks', reverse='project')
+        RelatedProperty(accessor='project__tasks', reverse='project')
 
         # Manually register as the decorator would
         key = ('test_rp.models', 'TestModel.tasks')

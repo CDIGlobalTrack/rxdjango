@@ -18,14 +18,13 @@ in GridFS and referenced via a ``_grid_ref`` field.
 
 import json
 from datetime import datetime, timezone
-from copy import copy
 from decimal import Decimal
 import pymongo
 import gridfs
 from motor import motor_asyncio
 from django.db import ProgrammingError
 from django.conf import settings
-from .redis import get_tstamp, sync_get_tstamp
+from .redis import get_tstamp
 from .serialize import json_dumps
 try:
     from rxdjango.utils import delta_utils_c as delta_utils
@@ -343,10 +342,9 @@ class MongoSignalWriter:
                     upsert=True,
                 )
 
-            if (original is None
-                or instance['_operation'] == 'delete'
-                or instance.get('_deleted', False) != original.get('_deleted', False)
-                ):
+            if (original is None or
+                    instance['_operation'] == 'delete' or
+                    instance.get('_deleted', False) != original.get('_deleted', False)):
                 deltas.append(instance)
             else:
                 deltas += delta_utils.generate_delta(original, instance)

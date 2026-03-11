@@ -204,7 +204,7 @@ export default class StateBuilder<T> {
         const instanceType = model[property];
         if (Array.isArray(_instance[property])) {
           const ids = _instance[property] as number[];
-          newInstance[property] = ids.map((id, index) => this.getOrCreate(instanceType, id, key, property));
+          newInstance[property] = ids.map((id, _index) => this.getOrCreate(instanceType, id, key, property));
         } else {
           newInstance[property] = this.getOrCreate(instanceType, value, key, property);
         }

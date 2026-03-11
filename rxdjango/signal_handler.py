@@ -136,11 +136,11 @@ class SignalHandler:
             try:
                 current = sender.objects.get(pk=instance.pk or instance.id)
             except sender.DoesNotExist:
-                return # Should not happen, but who knows
+                return  # Should not happen, but who knows
             acessor = layer.reverse_acessor
             try:
                 old_parent = getattr(current, acessor)
-            except AttributeError as e:
+            except AttributeError:
                 # This is a bug in RxDjango.
                 # While we don't fix it, let's not break things
                 return
@@ -319,6 +319,7 @@ class SignalHandler:
                     'instance_id': instance.id,
                 },
             )
+
         def remove_from_list(sender, instance, **kwargs):
             if sender is not anchor_model:
                 return

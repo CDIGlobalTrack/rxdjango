@@ -69,6 +69,7 @@ class RelatedProperty:
         cls.unknown_properties.add(key)
         return cls.accessors.get(key)
 
+
 def _make_key(model, property_name):
     qualname = '.'.join([model.__name__, property_name])
     return (model.__module__, qualname)

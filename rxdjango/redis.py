@@ -1,13 +1,12 @@
 import json
 import redis
-from asgiref.sync import async_to_sync
-from django.utils.functional import cached_property
 from django.conf import settings
 from rxdjango.serialize import json_dumps
 
 
 async def _connect():
     return await redis.asyncio.from_url(settings.REDIS_URL)
+
 
 def _sync_connect():
     return redis.from_url(settings.REDIS_URL)
@@ -18,6 +17,7 @@ async def get_tstamp():
     tstamp = await conn.time()
     return _make_tstamp(tstamp)
 
+
 def sync_get_tstamp():
     conn = _sync_connect()
     tstamp = conn.time()
@@ -25,7 +25,7 @@ def sync_get_tstamp():
 
 
 def is_active(channel_class, anchor_id):
-    key = _make_key(channel_class.name, anchor_id, 'state');
+    key = _make_key(channel_class.name, anchor_id, 'state')
     conn = _sync_connect()
     # Return true if state is HEATING or HOT
     return conn.get(key) in (1, 2)
@@ -34,9 +34,9 @@ def is_active(channel_class, anchor_id):
 def _make_tstamp(tstamp):
     return tstamp[0] + tstamp[1] / 1000000
 
+
 def _make_key(channel_name, anchor_id, key):
     return f'{channel_name}:{anchor_id}:{key}'
-
 
 
 class RedisSession:
@@ -206,7 +206,6 @@ class RedisStateSession(RedisSession):
 
         return self.initial_state
 
-
     async def end_cold_session(self, success):
         """End a COLD session
 
@@ -285,10 +284,7 @@ class RedisStateSession(RedisSession):
         Args:
             objects (list): List of objects to append to the instances list.
         """
-        serialized_instances = [json_dumps(instance) for instance in instances]
-
         await self.connect()
-        start = self.written_instances
 
         for instance in instances:
             serialized = json_dumps(instance)
@@ -366,7 +362,6 @@ class RedisStateSession(RedisSession):
                         return
                     continue
                 last_length = instances_length
-
 
     _end_session_methods = [
         end_cold_session,

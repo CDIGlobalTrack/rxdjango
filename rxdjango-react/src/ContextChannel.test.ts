@@ -1,5 +1,5 @@
 import ContextChannel from './ContextChannel';
-import { Model, TempInstance, InstanceType } from './ContextChannel.interfaces';
+import { Model } from './ContextChannel.interfaces';
 
 // Mock WebSocket
 class MockWebSocket {

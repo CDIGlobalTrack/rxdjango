@@ -7,9 +7,8 @@ These tests verify that the deferred serialization mechanism works correctly:
 - Thread isolation works correctly
 """
 import unittest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from django.db import transaction
-from django.test import TestCase, TransactionTestCase
 
 from rxdjango.transaction_manager import (
     TransactionBroadcastManager,

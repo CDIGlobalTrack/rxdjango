@@ -5,10 +5,9 @@ Tests the JSON serialization utilities including datetime conversion
 and custom type handling.
 """
 import json
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
 
-import pytest
 from pytz import utc
 
 from rxdjango.serialize import default_serializer, json_dumps

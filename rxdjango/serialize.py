@@ -11,5 +11,5 @@ def default_serializer(value):
     return str(value)
 
 
-def json_dumps(value):    
+def json_dumps(value):
     return json.dumps(value, default=default_serializer)

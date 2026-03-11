@@ -47,13 +47,7 @@ from __future__ import annotations
 
 import json
 from typing import Any, Callable
-from datetime import datetime
-from pytz import utc
-from django.utils import timezone
-from django.db import models
-from django.db.models.query import QuerySet
 from django.contrib.auth.models import AbstractBaseUser
-from asgiref.sync import sync_to_async, async_to_sync
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
@@ -139,7 +133,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         # data = json.loads(text_data)
         data = text_data
         token = data.get('token', None)
-        last_update  = data.get('last_update', None)
+        last_update = data.get('last_update', None)
 
         user = None
         try:
@@ -180,6 +174,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             if getattr(self, local_method_name, None):
                 raise TypeError(f"Can't override method {local_method_name} in consumer,"
                                 " chose another type for this event")
+
             # Inject a method in consumer matching the type name with
             # the decorated method in channel
             async def method(event):
@@ -347,14 +342,13 @@ class StateConsumer(AsyncWebsocketConsumer):
         Args:
             action: Parsed JSON dict with 'callId', 'action', and 'params' keys.
         """
-        call_id = action['callId']
         method_name = action.pop('action')
         params = action.pop('params')
 
         try:
             action['result'] = await execute_action(self.channel, method_name, params)
             await self.send(text_data=json.dumps(action))
-        except Exception as e:
+        except Exception:
             action['error'] = 'Error'
             await self.send(text_data=json.dumps(action))
             raise
@@ -371,7 +365,7 @@ class StateConsumer(AsyncWebsocketConsumer):
         if error:
             data['error'] = error
         text_data = json_dumps(data)
-        close = error != None
+        close = error is not None
         await self.send(text_data=text_data, close=close)
 
     async def prepend_anchor_id(self, anchor_id: int) -> None:
@@ -431,7 +425,6 @@ def get_consumer_methods(cls: type) -> dict[str, tuple[str, Callable]]:
     Pops matching entries from the global __CONSUMERS registry to avoid
     duplicate registrations.
     """
-    consumers = __CONSUMERS
     keys = list(__CONSUMERS.keys())
     qualname = '.'.join((cls.__module__, cls.__qualname__))
     consumer_methods: dict[str, tuple[str, Callable]] = {}

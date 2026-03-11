@@ -8,7 +8,6 @@ live in test_project/react_test/tests/ and are run via manage.py test.
 For tests that need minimal Django setup (e.g. testing metaclass logic
 with serializers), we configure Django settings here.
 """
-import os
 import django
 from django.conf import settings
 

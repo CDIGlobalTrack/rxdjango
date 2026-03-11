@@ -6,8 +6,6 @@ Tests the channel key generation and WebsocketRouter class.
 import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
-import pytest
-
 from rxdjango.websocket_router import (
     SYSTEM_CHANNEL,
     WebsocketRouter,

@@ -2,10 +2,8 @@ import StateBuilder from './StateBuilder';
 import { TempInstance } from './ContextChannel.interfaces';
 import {
   ProjectType,
-  TaskPayload,
   ANCHOR,
   MODEL,
-  ProjectPayload,
 } from './StateBuilder.mock';
 
 const header = (

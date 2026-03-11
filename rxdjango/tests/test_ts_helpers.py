@@ -7,8 +7,6 @@ type mapping, export registry, snake_to_camel, and header generation.
 from decimal import Decimal
 from datetime import datetime
 
-import pytest
-
 from rxdjango.ts import (
     interface_name,
     export_interface,
