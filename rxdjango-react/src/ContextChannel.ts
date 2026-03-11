@@ -87,8 +87,8 @@ abstract class ContextChannel<T, Y=unknown> {
     };
 
     ws.onRuntimeStateChange = (message) => {
-      const msg = message as { runtimeVar: keyof Y; value: unknown };
-      const runtimeVar = msg.runtimeVar;
+      const msg = message as { type: 'runtimeVar'; var: keyof Y; value: unknown };
+      const runtimeVar = msg.var;
       const value = msg.value;
       this.receiveRuntimeState(runtimeVar, value);
     };
@@ -276,10 +276,12 @@ abstract class ContextChannel<T, Y=unknown> {
         console.error(`Received a response for unmatched callId: ${response.callId}`);
         return;
     }
-    if (!response.error) {
+    if (response.error) {
+      promise.reject(response.error);
+    } else if (response.result !== undefined) {
       promise.resolve(response.result as T);
     } else {
-      promise.reject(response.error);
+      promise.reject({ code: 500, message: 'Malformed action response: missing both result and error' });
     }
     delete this.activeCalls[response.callId];
   }

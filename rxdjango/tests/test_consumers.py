@@ -203,7 +203,8 @@ class TestStateConsumer:
         kwargs = consumer.send.await_args.kwargs
         assert kwargs['close'] is True
         assert json.loads(kwargs['text_data']) == {
-            'status_code': 401,
+            'type': 'auth',
+            'statusCode': 401,
             'error': 'error/unauthorized',
         }
 
@@ -213,7 +214,7 @@ class TestStateConsumer:
 
         _run(consumer.prepend_anchor_id(7))
 
-        consumer.send.assert_awaited_once_with(text_data='{"prependAnchor": 7}')
+        consumer.send.assert_awaited_once_with(text_data='{"type": "prependAnchor", "anchorId": 7}')
 
     def test_receive_action_sends_result(self):
         consumer = StateConsumer()
@@ -229,7 +230,7 @@ class TestStateConsumer:
 
         consumer.send.assert_awaited_once()
         payload = json.loads(consumer.send.await_args.kwargs['text_data'])
-        assert payload == {'callId': 3, 'result': {'ok': True}}
+        assert payload == {'type': 'actionResponse', 'callId': 3, 'result': {'ok': True}}
 
     def test_receive_action_sends_error_and_reraises(self):
         consumer = StateConsumer()
@@ -249,4 +250,62 @@ class TestStateConsumer:
 
         consumer.send.assert_awaited_once()
         payload = json.loads(consumer.send.await_args.kwargs['text_data'])
-        assert payload == {'callId': 9, 'error': 'Error'}
+        assert payload == {'type': 'actionResponse', 'callId': 9, 'error': {'code': 500, 'message': 'boom'}}
+
+    def test_receive_authentication_without_token_sends_400(self):
+        """Authentication message missing 'token' field must send a 400 error response."""
+        consumer = StateConsumer()
+        consumer.send = AsyncMock()
+        consumer.close = AsyncMock()
+
+        _run(consumer.receive_authentication({}))
+
+        consumer.send.assert_awaited_once()
+        kwargs = consumer.send.await_args.kwargs
+        assert kwargs['close'] is True
+        payload = json.loads(kwargs['text_data'])
+        assert payload == {'type': 'auth', 'statusCode': 400, 'error': 'error/missing-token'}
+        consumer.close.assert_awaited_once()
+
+    def test_receive_action_missing_fields_with_call_id_sends_400(self):
+        """Action message with callId but missing action/params should send a 400 error."""
+        consumer = StateConsumer()
+        consumer.channel = object()
+        consumer.send = AsyncMock()
+
+        _run(consumer.receive_action({'callId': 5}))
+
+        consumer.send.assert_awaited_once()
+        payload = json.loads(consumer.send.await_args.kwargs['text_data'])
+        assert payload['type'] == 'actionResponse'
+        assert payload['callId'] == 5
+        assert payload['error']['code'] == 400
+
+    def test_receive_action_without_call_id_silently_dropped(self):
+        """Action message missing callId entirely should be silently dropped (no send)."""
+        consumer = StateConsumer()
+        consumer.channel = object()
+        consumer.send = AsyncMock()
+
+        _run(consumer.receive_action({'action': 'doSomething'}))
+
+        consumer.send.assert_not_called()
+
+    def test_receive_action_params_not_list_sends_400(self):
+        """Action message with params as a non-list value should send a 400 error."""
+        consumer = StateConsumer()
+        consumer.channel = object()
+        consumer.send = AsyncMock()
+
+        _run(consumer.receive_action({
+            'callId': 7,
+            'action': 'doSomething',
+            'params': {'key': 'value'},
+        }))
+
+        consumer.send.assert_awaited_once()
+        payload = json.loads(consumer.send.await_args.kwargs['text_data'])
+        assert payload['type'] == 'actionResponse'
+        assert payload['callId'] == 7
+        assert payload['error']['code'] == 400
+        assert 'params' in payload['error']['message'].lower()

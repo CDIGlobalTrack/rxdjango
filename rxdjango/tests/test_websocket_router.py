@@ -147,6 +147,7 @@ class TestSendSystemMessage:
             {
                 'type': 'relay',
                 'payload': {
+                    'type': 'tests',
                     'source': 'tests',
                     'message': {'text': 'hello'},
                 },

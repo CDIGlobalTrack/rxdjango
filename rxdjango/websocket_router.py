@@ -58,6 +58,7 @@ async def send_system_message(source, message):
     """
     channel_layer = channels.layers.get_channel_layer()
     payload = {
+        'type': source,
         'source': source,
         'message': message,
     }

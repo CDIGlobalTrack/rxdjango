@@ -10,6 +10,7 @@ export interface ActionError {
 }
 
 export interface ActionResponse<T> {
+  type: 'actionResponse';
   callId: number;
   result?: T;
   error?: ActionError;

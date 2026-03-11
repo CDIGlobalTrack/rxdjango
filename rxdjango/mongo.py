@@ -77,7 +77,7 @@ class MongoStateSession:
         self._tstamp = await get_tstamp()
         return self._tstamp
 
-    async def list_instances(self, user_id):
+    async def list_instances(self, user_id, last_update=None):
         """Yield batches of cached instances for the initial state load.
 
         Iterates over each model layer in the state tree and queries MongoDB
@@ -92,6 +92,8 @@ class MongoStateSession:
             user_id: The authenticated user's ID. Instances are filtered to
                 those with ``_user_key`` of ``None`` (shared) or matching
                 this user ID.
+            last_update: If provided, only return instances with ``_tstamp``
+                greater than this value (for efficient reconnection).
 
         Yields:
             list[dict]: Batches of instance dicts, one batch per model layer
@@ -105,6 +107,8 @@ class MongoStateSession:
                 '_instance_type': model.instance_type,
                 '_deleted': {'$ne': True},
             }
+            if last_update is not None:
+                query['_tstamp'] = {'$gt': last_update}
 
             async for instance in self.collection.find(query):
                 try:

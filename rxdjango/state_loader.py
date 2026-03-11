@@ -31,7 +31,7 @@ class StateLoader:
         base_key (str): The base key used for all Redis keys related to this anchor ID.
     """
 
-    def __init__(self, channel, anchor_id):
+    def __init__(self, channel, anchor_id, last_update=None):
         self.channel = channel
         self.state_model = channel._state_model
 
@@ -40,6 +40,7 @@ class StateLoader:
 
         self.anchor_id = anchor_id
         self.user_id = channel.user_id
+        self.last_update = last_update
 
         self.cache_state = None
         self.tstamp = None
@@ -115,8 +116,10 @@ class StateLoader:
             yield mark(instances, 'heating')
 
     async def _list_instances_hot(self):
-        """In HOT state, fetch filtered instances from mongo and send"""
-        async for instances in self.mongo.list_instances(self.user_id):
+        """In HOT state, fetch filtered instances from mongo and send.
+        If last_update is set, only fetches instances updated after that timestamp.
+        """
+        async for instances in self.mongo.list_instances(self.user_id, self.last_update):
             yield mark(instances, 'hot')
 
     router = [

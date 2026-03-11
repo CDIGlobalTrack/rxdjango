@@ -16,7 +16,7 @@ Message Protocol
 Incoming messages (client -> server)::
 
     # Authentication (must be first message)
-    {"token": "<rest_framework_auth_token>", "last_update": <timestamp|null>}
+    {"token": "<rest_framework_auth_token>", "lastUpdate": <timestamp|null>}
 
     # Action call (RPC)
     {"callId": <unique_id>, "action": "methodName", "params": [...]}
@@ -24,24 +24,31 @@ Incoming messages (client -> server)::
 Outgoing messages (server -> client)::
 
     # Connection status
-    {"status_code": 200}
-    {"status_code": 401, "error": "error/unauthorized"}
+    {"type": "auth", "statusCode": 200}
+    {"type": "auth", "statusCode": 401, "error": "error/unauthorized"}
 
     # Initial anchor list
-    {"initialAnchors": [1, 2, 3]}
+    {"type": "initialAnchors", "anchorIds": [1, 2, 3]}
 
-    # State instances (array of flat instances)
+    # Prepend anchor (many=True)
+    {"type": "prependAnchor", "anchorId": 4}
+
+    # State instances (array of flat instances, no type wrapper)
     [{"id": 1, "_instance_type": "app.Serializer", "_tstamp": ..., ...}, ...]
 
     # End of initial state marker
     [{"_instance_type": "", "_tstamp": ..., "_operation": "end_initial_state", "id": 0}]
 
     # Action response
-    {"callId": <id>, "result": ...}
-    {"callId": <id>, "error": "Error"}
+    {"type": "actionResponse", "callId": <id>, "result": ...}
+    {"type": "actionResponse", "callId": <id>, "error": {"code": 500, "message": "..."}}
 
     # Runtime state change
-    {"runtimeVar": "varName", "value": ...}
+    {"type": "runtimeVar", "var": "varName", "value": ...}
+
+    # System/maintenance broadcasts
+    {"type": "system", "source": "system", "message": "..."}
+    {"type": "maintenance", "source": "maintenance", "message": "..."}
 """
 from __future__ import annotations
 
@@ -121,19 +128,21 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         Expected message format::
 
-            {"token": "<rest_framework_auth_token>", "last_update": <timestamp|null>}
+            {"token": "<auth_token>", "lastUpdate": <timestamp|null>}
 
         On success: authenticates user, checks permissions, loads initial state.
         On failure: sends error status and closes connection.
 
         Args:
-            text_data: Parsed JSON dict with 'token' and optional 'last_update' keys.
+            text_data: Parsed JSON dict with 'token' and optional 'lastUpdate' keys.
         """
-        # If user is not logged, we expect credentials
-        # data = json.loads(text_data)
         data = text_data
         token = data.get('token', None)
-        last_update = data.get('last_update', None)
+        if token is None:
+            await self.send_connection_status(400, 'error/missing-token')
+            await self.close()
+            return
+        last_update = data.get('lastUpdate', None)
 
         user = None
         try:
@@ -196,11 +205,12 @@ class StateConsumer(AsyncWebsocketConsumer):
         await self.channel.on_connect(tstamp)
 
         await self.send(text_data=json.dumps({
-            'initialAnchors': self.anchor_ids,
+            'type': 'initialAnchors',
+            'anchorIds': self.anchor_ids,
         }))
 
         for anchor_id in self.anchor_ids:
-            await self._load_state(anchor_id)
+            await self._load_state(anchor_id, tstamp)
 
     async def instances_list_add(self, event: dict[str, Any]) -> None:
         """Handle channel layer event for adding an instance to a many=True list.
@@ -239,13 +249,18 @@ class StateConsumer(AsyncWebsocketConsumer):
         redis = RedisSession(self.context_channel_class, anchor_id)
         await redis.session_disconnect()
 
-    async def _load_state(self, anchor_id: int) -> None:
+    async def _load_state(self, anchor_id: int, last_update: float | None = None) -> None:
         """Load and send initial state for an anchor from MongoDB cache.
 
         Streams state instances to the client in batches, then sends
         an end-of-data marker with the current timestamp.
+
+        Args:
+            anchor_id: The anchor instance ID to load state for.
+            last_update: If provided, only send instances updated after this
+                timestamp (for efficient reconnection).
         """
-        async with StateLoader(self.channel, anchor_id) as loader:
+        async with StateLoader(self.channel, anchor_id, last_update) as loader:
             async for instances in loader.list_instances():
                 if instances:
                     data = json_dumps(instances)
@@ -342,15 +357,49 @@ class StateConsumer(AsyncWebsocketConsumer):
         Args:
             action: Parsed JSON dict with 'callId', 'action', and 'params' keys.
         """
-        method_name = action.pop('action')
-        params = action.pop('params')
+        call_id = action.get('callId')
+        method_name = action.get('action')
+        params = action.get('params')
+
+        if call_id is None or method_name is None or params is None:
+            if call_id is not None:
+                response = {
+                    'type': 'actionResponse',
+                    'callId': call_id,
+                    'error': {
+                        'code': 400,
+                        'message': 'Invalid action message: requires callId, action, and params fields',
+                    },
+                }
+                await self.send(text_data=json.dumps(response))
+            return
+
+        if not isinstance(params, list):
+            response = {
+                'type': 'actionResponse',
+                'callId': call_id,
+                'error': {
+                    'code': 400,
+                    'message': 'params must be an array',
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+            return
 
         try:
-            action['result'] = await execute_action(self.channel, method_name, params)
-            await self.send(text_data=json.dumps(action))
-        except Exception:
-            action['error'] = 'Error'
-            await self.send(text_data=json.dumps(action))
+            result = await execute_action(self.channel, method_name, params)
+            response = {'type': 'actionResponse', 'callId': call_id, 'result': result}
+            await self.send(text_data=json.dumps(response))
+        except Exception as e:
+            response = {
+                'type': 'actionResponse',
+                'callId': call_id,
+                'error': {
+                    'code': getattr(e, 'code', 500),
+                    'message': str(e) or type(e).__name__,
+                },
+            }
+            await self.send(text_data=json.dumps(response))
             raise
 
     async def send_connection_status(self, status_code: int, error: str | None = None) -> None:
@@ -360,8 +409,7 @@ class StateConsumer(AsyncWebsocketConsumer):
             status_code: HTTP-like status code (200, 401, 403, 404).
             error: Optional error string. If provided, the connection is closed.
         """
-        data = {}
-        data['status_code'] = status_code
+        data = {'type': 'auth', 'statusCode': status_code}
         if error:
             data['error'] = error
         text_data = json_dumps(data)
@@ -374,7 +422,8 @@ class StateConsumer(AsyncWebsocketConsumer):
         Used for many=True channels when a new instance is added at the beginning.
         """
         data = {
-            'prependAnchor': anchor_id,
+            'type': 'prependAnchor',
+            'anchorId': anchor_id,
         }
         text_data = json_dumps(data)
         await self.send(text_data=text_data)

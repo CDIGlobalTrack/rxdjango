@@ -41,6 +41,7 @@ export default class PersistentWebSocket {
   private authStatusReceived: boolean;
   private timer: NodeJS.Timeout | undefined;
   private reason: keyof typeof preventReconnectionReasons | undefined;
+  private lastUpdate: number | null = null;
 
   public authStatus: AuthStatus | undefined;
 
@@ -89,68 +90,73 @@ export default class PersistentWebSocket {
     this.ws = new WebSocket(this.url, this.protocols);
 
     this.ws.onopen = () => {
-      this.ws!.send(JSON.stringify({ token: this.token }));
+      this.ws!.send(JSON.stringify({ token: this.token, lastUpdate: this.lastUpdate }));
       this.reconnectInterval = this.initialReconnectInterval;
       this.onOpen();
     };
 
     this.ws.onmessage = (event) => {
+      // Instance arrays are sent as JSON arrays (no type wrapper)
+      if (event.data[0] === '[') {
+        const instances = JSON.parse(event.data) as TempInstance[];
+        for (const instance of instances) {
+          if (instance._tstamp && instance._tstamp > (this.lastUpdate || 0)) {
+            this.lastUpdate = instance._tstamp;
+          }
+        }
+        this.onInstances(instances);
+        return;
+      }
+
       const message = JSON.parse(event.data);
 
-      if (message['status_code'] && message['status_code'] == 200) {
-        this.onConnected();
-      }
+      switch (message.type) {
+        case 'auth':
+          this.authStatusReceived = true;
+          this.authStatus = message as AuthStatus;
+          this.onAuth(this.authStatus);
+          if (this.authStatus.statusCode === 200) {
+            this.onConnected();
+          } else if (this.authStatus.error) {
+            console.error("Authentication Error:", this.authStatus.error);
+            this.onError(new Error(this.authStatus.error));
+            this.disconnect('authentication-error');
+          }
+          break;
 
-      if (!this.authStatusReceived) {
-        this.authStatusReceived = true;
-        this.authStatus = message as AuthStatus;
-        this.onAuth(this.authStatus);
-        if (this.authStatus.error) {
-          console.error("Authentication Error:", this.authStatus.error);
-          this.onError(new Error(this.authStatus.error));
-          this.disconnect('authentication-error');
-        }
-        return;
-      }
+        case 'initialAnchors':
+          if (message.anchorIds.length > 0) {
+            this.onInitialAnchors(message.anchorIds as number[]);
+          } else {
+            this.onEmpty();
+          }
+          break;
 
-      if (event.data[0] == '[') {
-        this.onInstances(message as TempInstance[]);
-      } else if (event.data[0] != '{') {
-        return;
-      }
+        case 'prependAnchor':
+          this.onAnchorPrepend(message.anchorId as number);
+          break;
 
-      if (message['callId']) {
-        this.onActionResponse(message as ActionResponse<unknown>);
-        return;
-      }
+        case 'actionResponse':
+          this.onActionResponse(message as ActionResponse<unknown>);
+          break;
 
-      if (message['runtimeVar']) {
-        this.onRuntimeStateChange(message);
-        return;
-      }
+        case 'runtimeVar':
+          this.onRuntimeStateChange(message);
+          break;
 
-      if (message['initialAnchors']) {
-        if (message['initialAnchors'].length > 0) {
-          this.onInitialAnchors(message['initialAnchors'] as number[]);
-        } else {
-          this.onEmpty();
-        }
-        return;
-      }
+        case 'system':
+          this.onSystem(message as SystemMessage);
+          break;
 
-      if (message['prependAnchor']) {
-        this.onAnchorPrepend(message['prependAnchor'] as number);
-        return;
-      }
+        case 'maintenance':
+          this.persistentReconnect();
+          break;
 
-      if (message['source'] == 'system') {
-        this.onSystem(message as SystemMessage);
-        return;
-      }
-
-      if (message['source'] == 'maintenance') {
-        this.persistentReconnect();
-        return;
+        default:
+          if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+            console.warn('RxDjango: Unknown message type:', message.type, message);
+          }
+          break;
       }
     };
 
@@ -197,6 +203,9 @@ export default class PersistentWebSocket {
     }
 
     this.reason = reason;
+    if (reason) {
+      this.lastUpdate = null;
+    }
     this.ws?.close();
     this.ws = undefined;
   }
