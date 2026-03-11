@@ -41,7 +41,7 @@ def create_app_channels(app, apply_changes=True, force=False):
 
     code.extend([
         "import { ContextChannel } from '@rxdjango/react';\n",
-        f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
+        f'const SOCKET_URL = "{settings.RX_WEBSOCKET_URL}";',
     ])
 
     import_types = defaultdict(list)
@@ -237,7 +237,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     code.append(f"  constructor({params}) {{")
     code.append("    super(token);")
     code.extend([f"    this.args['{key}'] = {key};" for key in parameters])
-    code.append("  }}")
+    code.append("  }")
 
     code.append('')
 
@@ -257,7 +257,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
         code.append(f"  public async {camel_action}({params}): Promise<{return_type}> {{")
         code.append(f"    return await this.callAction('{action.__name__}', [{call_params}]);")
-        code.append("  }}")
+        code.append("  }")
 
         code.append('')
 
