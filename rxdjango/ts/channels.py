@@ -41,7 +41,7 @@ def create_app_channels(app, apply_changes=True, force=False):
 
     code.extend([
         "import { ContextChannel } from '@rxdjango/react';\n",
-        f'const SOCKET_URL = "{settings.RX_WEBSOCKET_URL}";',
+        f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
     import_types = defaultdict(list)
