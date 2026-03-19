@@ -175,10 +175,55 @@ Base class for creating real-time channels.
       2. ``RX_CACHE_TTL`` Django setting (global override)
       3. Default: 604800 (1 week)
 
-   .. py:classmethod:: get_registered_channels() -> set
+    .. py:classmethod:: get_registered_channels() -> set
 
-      Return all registered ContextChannel subclasses. Useful for
-      introspection and cache management tooling.
+       Return all registered ContextChannel subclasses. Useful for
+       introspection and cache management tooling.
+
+    .. py:method:: can_save(instance, data) -> bool
+
+       Check if the current user may update an existing instance.
+       Called after ``Meta.writable`` and anchor context checks pass.
+       This is a synchronous method.
+
+       :param instance: The database instance (pre-update state)
+       :param data: Partial field dict being applied
+       :returns: True to allow, False to deny (rolls back optimistic update)
+       :default: False
+
+       .. note:: The type must be declared with ``SAVE`` in ``Meta.writable``
+          and the instance must belong to the channel's anchor context before
+          this method is called.
+
+    .. py:method:: can_create(model_class, parent, data) -> bool
+
+       Check if the current user may create a new child instance.
+       Called after ``Meta.writable`` and anchor context checks pass.
+       This is a synchronous method.
+
+       :param model_class: The child model being instantiated
+       :param parent: The parent instance that owns the relation
+       :param data: Field dict from the frontend
+       :returns: True to allow, False to deny (removes temporary instance)
+       :default: False
+
+       .. note:: The type must be declared with ``CREATE`` in ``Meta.writable``
+          and the parent must belong to the channel's anchor context before
+          this method is called.
+
+    .. py:method:: can_delete(instance) -> bool
+
+       Check if the current user may delete an existing instance.
+       Called after ``Meta.writable`` and anchor context checks pass.
+       This is a synchronous method.
+
+       :param instance: The database instance to delete
+       :returns: True to allow, False to deny (restores instance in UI)
+       :default: False
+
+       .. note:: The type must be declared with ``DELETE`` in ``Meta.writable``
+          and the instance must belong to the channel's anchor context before
+          this method is called.
 
 
 Decorators
@@ -332,6 +377,12 @@ All exceptions are defined in ``rxdjango.exceptions``.
    Raised during channel initialization when an ``@action``-decorated method
    is not defined with ``async def``. All action methods must be async.
 
+.. py:exception:: WriteError
+
+   Raised when a write operation (save, create, delete) fails due to
+   invalid data, missing instances, or other request errors. Results in
+   a 400 error code sent to the client.
+
 
 WebSocket Protocol
 ------------------
@@ -340,7 +391,7 @@ The WebSocket message format used between the Django backend and React
 frontend.
 
 Incoming Messages (Client → Server)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Authentication (must be the first message after connecting)::
 
@@ -349,6 +400,21 @@ Authentication (must be the first message after connecting)::
 Action call (RPC)::
 
     {"callId": <unique_id>, "action": "methodName", "params": [...]}
+
+Write operations (optimistic updates)::
+
+    # Save an existing instance
+    {"type": "write", "writeId": <id>, "operation": "save",
+     "instanceType": "app.Serializer", "instanceId": <id>, "data": {...}}
+
+    # Create a new child instance
+    {"type": "write", "writeId": <id>, "operation": "create",
+     "instanceType": "app.ChildSerializer", "parentType": "app.ParentSerializer",
+     "parentId": <id>, "relationName": "children", "data": {...}}
+
+    # Delete an instance
+    {"type": "write", "writeId": <id>, "operation": "delete",
+     "instanceType": "app.Serializer", "instanceId": <id>}
 
 Outgoing Messages (Server → Client)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -376,6 +442,15 @@ Action response::
 
     {"callId": <id>, "result": ...}
     {"callId": <id>, "error": "Error"}
+
+Write response::
+
+    {"type": "writeResponse", "writeId": <id>, "success": true}
+    {"type": "writeResponse", "writeId": <id>, "success": false,
+     "error": {"code": 403, "message": "Permission denied"}}
+
+Write error codes: 400 (instance not found, not in context, bad data),
+403 (type/operation not in ``Meta.writable``, or ``can_*`` denied), 500 (server error).
 
 Runtime state change::
 
@@ -438,15 +513,46 @@ ContextChannel
       :param instance_id: The instance ID
       :returns: The instance, or null if not found
 
-   .. js:method:: callAction(action, params)
+    .. js:method:: callAction(action, params)
 
-      Call a backend ``@action`` method via WebSocket RPC.
-      Used internally by generated subclass methods.
+       Call a backend ``@action`` method via WebSocket RPC.
+       Used internally by generated subclass methods.
 
-      :param action: The snake_case action name
-      :param params: Array of parameters
-      :returns: Promise resolving with the action's return value
+       :param action: The snake_case action name
+       :param params: Array of parameters
+       :returns: Promise resolving with the action's return value
 
+    .. js:method:: saveInstance(instanceType, instanceId, data)
+
+       Save changes to an existing instance with optimistic update.
+       The UI updates immediately, then reconciles when the server
+       confirms or rolls back on error.
+
+       :param instanceType: The ``_instance_type`` string
+       :param instanceId: The instance ID
+       :param data: Partial field dict to apply
+       :returns: Promise that resolves on success, rejects with error
+
+    .. js:method:: createInstance(instanceType, parentType, parentId, relationName, data)
+
+       Create a new child instance with optimistic update.
+       A temporary negative ID is assigned until the server responds.
+
+       :param instanceType: The ``_instance_type`` for the new instance
+       :param parentType: The parent's ``_instance_type``
+       :param parentId: The parent instance ID
+       :param relationName: The relation field name on the parent
+       :param data: Field dict for the new instance
+       :returns: Promise resolving with the temporary ID
+
+    .. js:method:: deleteInstance(instanceType, instanceId)
+
+       Delete an instance with optimistic removal.
+       The instance is immediately removed from UI state and restored on error.
+
+       :param instanceType: The ``_instance_type`` string
+       :param instanceId: The instance ID
+       :returns: Promise that resolves on success, rejects with error
 
 useChannelState
 ~~~~~~~~~~~~~~~

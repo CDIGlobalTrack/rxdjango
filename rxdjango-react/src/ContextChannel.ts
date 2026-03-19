@@ -1,7 +1,7 @@
 import PersistentWebsocket from './PersistentWebsocket';
 import StateBuilder from './StateBuilder';
-import { NoConnectionListener, TempInstance, Listener, Model, InstanceListener, InstanceType } from './ContextChannel.interfaces';
-import { Action, ActionResponse, ActionIndex, CallPromise } from './actions.d';
+import { NoConnectionListener, TempInstance, Listener, Model, InstanceListener, InstanceType, Writable } from './ContextChannel.interfaces';
+import { Action, ActionResponse, ActionIndex, CallPromise, WriteMessage, WriteResponse, WriteIndex, WriteError } from './actions.d';
 
 /**
  * Base class for generated TypeScript channel classes.
@@ -37,6 +37,8 @@ abstract class ContextChannel<T, Y=unknown> {
   private runtimeListeners: Listener<Y>[] = [];
   private noConnectionListeners: NoConnectionListener[] = [];
   private activeCalls: ActionIndex = {};
+  private activeWrites: WriteIndex = {};
+  private tempIdCounter: number = -1;
   private token: string;
 
   protected args: { [key: string]: number | string } = {};
@@ -47,6 +49,7 @@ abstract class ContextChannel<T, Y=unknown> {
   abstract model: Model;
   abstract many: boolean;
   abstract runtimeState: Y | undefined | null;
+  public writable: Writable = {};
 
   public connected: boolean = false;
   public onConnected: () => void = () => {};
@@ -72,7 +75,12 @@ abstract class ContextChannel<T, Y=unknown> {
     if (this.builder)
       return;
 
-    this.builder = new StateBuilder<T>(this.model, this.anchor, this.many);
+    const writeCallbacks = Object.keys(this.writable).length > 0 ? {
+      saveInstance: this.saveInstance.bind(this),
+      createInstance: this.createInstance.bind(this),
+      deleteInstance: this.deleteInstance.bind(this),
+    } : undefined;
+    this.builder = new StateBuilder<T>(this.model, this.anchor, this.many, this.writable, writeCallbacks);
     const ws = new PersistentWebsocket(this.getEndpoint(), this.token);
 
     ws.onClose = this.onclose.bind(this);
@@ -84,6 +92,10 @@ abstract class ContextChannel<T, Y=unknown> {
 
     ws.onActionResponse = (response) => {
       this.receiveActionResponse(response);
+    };
+
+    ws.onWriteResponse = (response) => {
+      this.receiveWriteResponse(response);
     };
 
     ws.onRuntimeStateChange = (message) => {
@@ -284,6 +296,141 @@ abstract class ContextChannel<T, Y=unknown> {
       promise.reject({ code: 500, message: 'Malformed action response: missing both result and error' });
     }
     delete this.activeCalls[response.callId];
+  }
+
+  private receiveWriteResponse(response: WriteResponse) {
+    const promise = this.activeWrites[response.writeId];
+    if (!promise) {
+      console.error(`Received a write response for unmatched writeId: ${response.writeId}`);
+      return;
+    }
+    if (response.success) {
+      promise.resolve();
+    } else if (response.error) {
+      promise.reject(response.error);
+    } else {
+      promise.reject({ code: 500, message: 'Malformed write response: missing both success and error' });
+    }
+    delete this.activeWrites[response.writeId];
+  }
+
+  async saveInstance(instanceType: string, instanceId: number, data: Record<string, unknown>): Promise<void> {
+    const writeId = this.generateUniqueId();
+    const optimisticKey = `${instanceType}:${instanceId}`;
+
+    const previousState = this.builder?.getRawInstance(optimisticKey);
+    if (previousState) {
+      this.builder?.applyOptimisticUpdate(instanceType, instanceId, data);
+      this.notify();
+    }
+
+    const cmd: WriteMessage = {
+      type: 'write',
+      writeId,
+      operation: 'save',
+      instanceType,
+      instanceId,
+      data,
+    };
+
+    return new Promise((resolve, reject) => {
+      this.activeWrites[writeId] = {
+        resolve: () => {
+          resolve();
+        },
+        reject: (error: WriteError) => {
+          if (previousState) {
+            this.builder?.rollbackOptimisticUpdate(instanceType, instanceId, previousState);
+            this.notify();
+          }
+          reject(error);
+        },
+      };
+      this.ws?.send(JSON.stringify(cmd));
+    });
+  }
+
+  async createInstance(
+    instanceType: string,
+    parentType: string,
+    parentId: number,
+    relationName: string,
+    data: Record<string, unknown> = {},
+  ): Promise<number> {
+    const writeId = this.generateUniqueId();
+    const tempId = this.tempIdCounter--;
+
+    this.builder?.addTempInstance(instanceType, tempId, parentType, parentId, relationName, data);
+    this.notify();
+
+    const cmd: WriteMessage = {
+      type: 'write',
+      writeId,
+      operation: 'create',
+      instanceType,
+      parentType,
+      parentId,
+      relationName,
+      data,
+    };
+
+    return new Promise((resolve, reject) => {
+      this.activeWrites[writeId] = {
+        resolve: () => {
+          resolve(tempId);
+        },
+        reject: (error: WriteError) => {
+          this.builder?.removeTempInstance(instanceType, tempId);
+          this.notify();
+          reject(error);
+        },
+      };
+      this.ws?.send(JSON.stringify(cmd));
+    });
+  }
+
+  async deleteInstance(instanceType: string, instanceId: number): Promise<void> {
+    const writeId = this.generateUniqueId();
+    const optimisticKey = `${instanceType}:${instanceId}`;
+
+    const previousState = this.builder?.getRawInstance(optimisticKey);
+    const parentInfo = this.builder?.getParentInfo(optimisticKey);
+
+    if (previousState) {
+      this.builder?.applyOptimisticDelete(instanceType, instanceId);
+      this.notify();
+    }
+
+    const cmd: WriteMessage = {
+      type: 'write',
+      writeId,
+      operation: 'delete',
+      instanceType,
+      instanceId,
+    };
+
+    return new Promise((resolve, reject) => {
+      this.activeWrites[writeId] = {
+        resolve: () => {
+          resolve();
+        },
+        reject: (error: WriteError) => {
+          if (previousState && parentInfo) {
+            this.builder?.rollbackOptimisticDelete(
+              instanceType,
+              instanceId,
+              previousState,
+              parentInfo.parentType,
+              parentInfo.parentId,
+              parentInfo.relationName,
+            );
+            this.notify();
+          }
+          reject(error);
+        },
+      };
+      this.ws?.send(JSON.stringify(cmd));
+    });
   }
 
   private getEndpoint(): string {

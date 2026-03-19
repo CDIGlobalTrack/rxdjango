@@ -20,20 +20,35 @@ export interface ProjectType extends TempInstance {
   customer: CustomerType;
 }
 
-export interface TaskPayload extends TempInstance {
+// Write payload types — only writable fields, used by Saveable/Creatable
+export type TaskPayload = {
   taskName?: string;
   user?: number;
-}
+};
 
-export interface CustomerPayload extends TempInstance {
+export type CustomerPayload = {
   customerName?: string;
-  tasks?: number[] | undefined;
+};
+
+export type ProjectPayload = {
+  projectName?: string;
+};
+
+// Test data types — extend TempInstance with relation IDs for StateBuilder tests
+export interface ProjectTestData extends TempInstance {
+  projectName?: string;
+  tasks?: number[];
+  customer?: number;
 }
 
-export interface ProjectPayload extends TempInstance {
-  projectName?: string;
-  tasks?: number[] | undefined;
-  customer?: number;
+export interface CustomerTestData extends TempInstance {
+  customerName?: string;
+  tasks?: number[];
+}
+
+export interface TaskTestData extends TempInstance {
+  taskName?: string;
+  user?: number;
 }
 
 export const ANCHOR = 'project.serializers.ProjectSerializer';
