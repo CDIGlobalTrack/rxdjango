@@ -103,6 +103,38 @@ setting. Defaults to ``None`` (use global setting).
            state = MyNestedSerializer()
            cache_ttl = 3600  # Expire after 1 hour instead of the global default
 
+writable
+--------
+
+Declares which serializer types support optimistic write operations.
+This declaration is enforced on both sides:
+
+- **Frontend**: ``makefrontend`` generates a ``writable`` property on the
+  TypeScript channel class, and ``StateBuilder`` automatically attaches
+  ``.save()``, ``.create()``, and ``.delete()`` methods to state objects.
+- **Backend**: The server rejects any write operation whose instance type
+  and operation are not declared here, returning a 403 before any database
+  access.
+
+Types not listed are read-only. Operations not listed for a type are
+denied even if ``can_*`` would return ``True``.
+
+.. code-block:: python
+
+   from rxdjango.operations import SAVE, CREATE
+   from myapp.serializers import MyNestedSerializer, TaskSerializer, AssetSerializer
+
+   class MyContextChannel(ContextChannel):
+
+       class Meta:
+           state = MyNestedSerializer()
+           writable = {
+               TaskSerializer: [SAVE, CREATE],
+               AssetSerializer: [CREATE],
+           }
+
+See :ref:`optimistic-updates` for full documentation on write operations.
+
 RuntimeState class
 ==================
 
@@ -180,6 +212,82 @@ on_disconnect
 -------------
 
 This method is called when client disconnects.
+
+Write Authorization Methods
+===========================
+
+RxDjango supports client-side write operations with optimistic updates.
+Write operations are protected by three layers, checked in order:
+
+1. **``Meta.writable`` declaration** — type and operation must be declared
+2. **Anchor context verification** — instance must belong to the channel's
+   current anchor (checked via MongoDB cache)
+3. **``can_*`` authorization** — custom business logic (below)
+
+Override these methods in your ContextChannel to implement the third layer:
+
+can_save
+--------
+
+Check if the current user may update an existing instance.
+
+.. code-block:: python
+
+   def can_save(self, instance, data) -> bool:
+       """Check if user can update an existing instance.
+
+       Args:
+           instance: The database instance (pre-update state)
+           data: Partial field dict being applied
+
+       Returns:
+           True to allow, False to deny (rolls back optimistic update)
+       """
+       return instance.owner_id == self.user.id
+
+**Default**: ``False`` (deny all unless overridden).
+
+can_create
+----------
+
+Check if the current user may create a new child instance.
+
+.. code-block:: python
+
+   def can_create(self, model_class, parent, data) -> bool:
+       """Check if user can create a new child instance.
+
+       Args:
+           model_class: The child model being instantiated
+           parent: The parent instance that owns the relation
+           data: Field dict from the frontend
+
+       Returns:
+           True to allow, False to deny (removes temporary instance)
+       """
+       return parent.owner_id == self.user.id
+
+**Default**: ``False`` (deny all unless overridden).
+
+can_delete
+----------
+
+Check if the current user may delete an existing instance.
+
+.. code-block:: python
+
+   def can_delete(self, instance) -> bool:
+       """Check if user can delete an instance.
+
+       Args:
+           instance: The database instance to delete
+
+       Returns:
+           True to allow, False to deny (restores instance in UI)
+       """
+       return instance.owner_id == self.user.id
+
+**Default**: ``False`` (deny all unless overridden).
 
 group_add
 ---------

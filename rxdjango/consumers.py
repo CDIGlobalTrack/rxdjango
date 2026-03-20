@@ -9,6 +9,7 @@ the Django backend and React frontend:
 4. **Real-time Sync**: Subscribe to update groups and relay changes
 5. **Actions (RPC)**: Execute ``@action`` decorated methods from frontend
 6. **Pub/Sub**: Handle ``@consumer`` decorated methods for group events
+7. **Write Operations**: Handle optimistic save/create/delete from frontend
 
 Message Protocol
 ----------------
@@ -20,6 +21,11 @@ Incoming messages (client -> server)::
 
     # Action call (RPC)
     {"callId": <unique_id>, "action": "methodName", "params": [...]}
+
+    # Write operations (optimistic updates)
+    {"type": "write", "writeId": <unique_id>, "operation": "save", "instanceType": "...", "instanceId": <id>, "data": {...}}
+    {"type": "write", "writeId": <unique_id>, "operation": "create", "instanceType": "...", "parentType": "...", "parentId": <id>, "relationName": "...", "data": {...}}
+    {"type": "write", "writeId": <unique_id>, "operation": "delete", "instanceType": "...", "instanceId": <id>}
 
 Outgoing messages (server -> client)::
 
@@ -43,6 +49,10 @@ Outgoing messages (server -> client)::
     {"type": "actionResponse", "callId": <id>, "result": ...}
     {"type": "actionResponse", "callId": <id>, "error": {"code": 500, "message": "..."}}
 
+    # Write response
+    {"type": "writeResponse", "writeId": <id>, "success": true}
+    {"type": "writeResponse", "writeId": <id>, "success": false, "error": {"code": 403, "message": "..."}}
+
     # Runtime state change
     {"type": "runtimeVar", "var": "varName", "value": ...}
 
@@ -60,7 +70,8 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
 from .actions import execute_action
-from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist
+from .write import execute_save, execute_create, execute_delete
+from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist, WriteError
 from .redis import RedisSession
 from rxdjango.serialize import json_dumps
 
@@ -110,7 +121,7 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         Routes messages based on authentication state:
         - Before auth: treated as authentication message
-        - After auth: treated as action (RPC) call
+        - After auth: routes to action (RPC) or write handler
         """
         try:
             data = json.loads(text_data)
@@ -119,7 +130,10 @@ class StateConsumer(AsyncWebsocketConsumer):
             raise
 
         if self.user:
-            await self.receive_action(data)
+            if data.get('type') == 'write':
+                await self.receive_write(data)
+            else:
+                await self.receive_action(data)
         else:
             await self.receive_authentication(data)
 
@@ -401,6 +415,117 @@ class StateConsumer(AsyncWebsocketConsumer):
             }
             await self.send(text_data=json.dumps(response))
             raise
+
+    async def receive_write(self, data: dict[str, Any]) -> None:
+        """Handle write operations (save, create, delete) from the frontend.
+
+        Expected message formats::
+
+            {"type": "write", "writeId": <id>, "operation": "save", "instanceType": "...", "instanceId": <id>, "data": {...}}
+            {"type": "write", "writeId": <id>, "operation": "create", "instanceType": "...", "parentType": "...", "parentId": <id>, "relationName": "...", "data": {...}}
+            {"type": "write", "writeId": <id>, "operation": "delete", "instanceType": "...", "instanceId": <id>}
+
+        Sends back success or error with the same writeId.
+        Django signals will broadcast the canonical state after successful operations.
+
+        Args:
+            data: Parsed JSON dict with write operation details.
+        """
+        write_id = data.get('writeId')
+        operation = data.get('operation')
+
+        if write_id is None or operation is None:
+            return
+
+        try:
+            if operation == 'save':
+                await self._handle_write_save(data)
+            elif operation == 'create':
+                await self._handle_write_create(data)
+            elif operation == 'delete':
+                await self._handle_write_delete(data)
+            else:
+                raise WriteError(f'Unknown operation: {operation}')
+
+            response = {
+                'type': 'writeResponse',
+                'writeId': write_id,
+                'success': True,
+            }
+            await self.send(text_data=json.dumps(response))
+
+        except ForbiddenError as e:
+            response = {
+                'type': 'writeResponse',
+                'writeId': write_id,
+                'success': False,
+                'error': {
+                    'code': 403,
+                    'message': str(e) or 'Permission denied',
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+
+        except WriteError as e:
+            response = {
+                'type': 'writeResponse',
+                'writeId': write_id,
+                'success': False,
+                'error': {
+                    'code': 400,
+                    'message': str(e),
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+
+        except Exception as e:
+            response = {
+                'type': 'writeResponse',
+                'writeId': write_id,
+                'success': False,
+                'error': {
+                    'code': 500,
+                    'message': str(e) or type(e).__name__,
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+            raise
+
+    async def _handle_write_save(self, data: dict[str, Any]) -> None:
+        """Handle a save operation."""
+        instance_type = data.get('instanceType')
+        instance_id = data.get('instanceId')
+        update_data = data.get('data', {})
+
+        if instance_type is None or instance_id is None:
+            raise WriteError('save requires instanceType and instanceId')
+
+        await execute_save(self.channel, instance_type, instance_id, update_data)
+
+    async def _handle_write_create(self, data: dict[str, Any]) -> None:
+        """Handle a create operation."""
+        instance_type = data.get('instanceType')
+        parent_type = data.get('parentType')
+        parent_id = data.get('parentId')
+        relation_name = data.get('relationName')
+        create_data = data.get('data', {})
+
+        if instance_type is None or parent_type is None or parent_id is None or relation_name is None:
+            raise WriteError('create requires instanceType, parentType, parentId, and relationName')
+
+        await execute_create(
+            self.channel, instance_type, parent_type, parent_id, relation_name, create_data
+        )
+
+    async def _handle_write_delete(self, data: dict[str, Any]) -> None:
+        """Handle a delete operation."""
+        instance_type = data.get('instanceType')
+        instance_id = data.get('instanceId')
+
+        if instance_type is None or instance_id is None:
+            raise WriteError('delete requires instanceType and instanceId')
+
+        await execute_delete(self.channel, instance_type, instance_id)
 
     async def send_connection_status(self, status_code: int, error: str | None = None) -> None:
         """Send a connection status message to the client.

@@ -4,7 +4,15 @@ import {
   TempInstance,
   UnloadedInstance,
   InstanceReference,
+  Writable,
+  WriteCallbacks,
 } from './ContextChannel.interfaces';
+
+interface ParentInfo {
+  parentType: string;
+  parentId: number;
+  relationName: string;
+}
 
 
 /**
@@ -57,15 +65,25 @@ export default class StateBuilder<T> {
   /** Whether this channel uses many=True (list of anchors). */
   private many: boolean;
 
+  /** Writable declaration mapping instance types to allowed operations. */
+  private writable: Writable;
+
+  /** Write callbacks for attaching save/create/delete methods. */
+  private writeCallbacks: WriteCallbacks | null;
+
   /**
    * @param model - The model definition from the generated channel
    * @param anchor - The `_instance_type` of the root serializer
    * @param many - Whether the channel state is a list of anchors
+   * @param writable - Optional writable declaration
+   * @param writeCallbacks - Optional write callbacks for attaching methods
    */
-  constructor(model: Model, anchor: string, many: boolean) {
+  constructor(model: Model, anchor: string, many: boolean, writable?: Writable, writeCallbacks?: WriteCallbacks) {
     this.model = model;
     this.anchor = anchor;
     this.many = many;
+    this.writable = writable || {};
+    this.writeCallbacks = writeCallbacks || null;
     this.rootType = undefined;
   }
 
@@ -201,17 +219,21 @@ export default class StateBuilder<T> {
     for (const [property, value] of Object.entries(_instance)) {
       if (model && model[property]) {
         // This is a relation, replace ids with instances
-        const instanceType = model[property];
+        const childType = model[property];
         if (Array.isArray(_instance[property])) {
           const ids = _instance[property] as number[];
-          newInstance[property] = ids.map((id, _index) => this.getOrCreate(instanceType, id, key, property));
+          const array = ids.map((id, _index) => this.getOrCreate(childType, id, key, property));
+          this.attachArrayCreate(array, childType, _instance._instance_type, _instance.id, property);
+          newInstance[property] = array;
         } else {
-          newInstance[property] = this.getOrCreate(instanceType, value, key, property);
+          newInstance[property] = this.getOrCreate(childType, value, key, property);
         }
       } else {
         newInstance[property] = value;
       }
     }
+
+    this.attachInstanceMethods(newInstance as InstanceType);
 
     if (!this.refs[key]) {
       this.refs[key] = [];
@@ -256,13 +278,57 @@ export default class StateBuilder<T> {
         instance[property] = this.index[key];
       } else {
         const related = instance[property] as unknown as InstanceType[];
-        instance[property] = related.map(
+        const array = related.map(
           rel => this.index[`${rel._instance_type}:${rel.id}`]
         );
+        const model = this.model[instance._instance_type];
+        if (model && model[property]) {
+          this.attachArrayCreate(array, model[property], instance._instance_type, instance.id, property);
+        }
+        instance[property] = array;
       }
-      this.index[ref.referrerKey] = {...instance};
+      const newInstance = {...instance};
+      this.attachInstanceMethods(newInstance);
+      this.index[ref.referrerKey] = newInstance;
       this.changeRef(ref.referrerKey, track);
     }
+  }
+
+  // Attach .save() and .delete() to an instance if its type is writable
+  private attachInstanceMethods(instance: InstanceType): void {
+    if (!this.writeCallbacks) return;
+    const ops = this.writable[instance._instance_type];
+    if (!ops) return;
+
+    const callbacks = this.writeCallbacks;
+    const instanceType = instance._instance_type;
+    const instanceId = instance.id;
+
+    if (ops.includes('save') && !(instance as any).save) {
+      (instance as any).save = (data: Record<string, unknown>) =>
+        callbacks.saveInstance(instanceType, instanceId, data);
+    }
+    if (ops.includes('delete') && !(instance as any).delete) {
+      (instance as any).delete = () =>
+        callbacks.deleteInstance(instanceType, instanceId);
+    }
+  }
+
+  // Attach .create() to an array if the child type is writable with 'create'
+  private attachArrayCreate(
+    array: InstanceType[],
+    childType: string,
+    parentType: string,
+    parentId: number,
+    relationName: string,
+  ): void {
+    if (!this.writeCallbacks) return;
+    const ops = this.writable[childType];
+    if (!ops || !ops.includes('create')) return;
+
+    const callbacks = this.writeCallbacks;
+    (array as any).create = (data: Record<string, unknown> = {}) =>
+      callbacks.createInstance(childType, parentType, parentId, relationName, data);
   }
 
   // Gets an instance from index, or create an unloaded one if non-existing
@@ -276,6 +342,180 @@ export default class StateBuilder<T> {
     this.refs[pkey] ||= [];
     this.refs[pkey].push({ property, referrerKey });
     return this.index[pkey];
+  }
+
+  public getRawInstance(key: string): InstanceType | null {
+    return this.index[key] || null;
+  }
+
+  public applyOptimisticUpdate(instanceType: string, instanceId: number, data: Record<string, unknown>): void {
+    const key = `${instanceType}:${instanceId}`;
+    const instance = this.index[key];
+    if (!instance) return;
+
+    const model = this.model[instanceType];
+    for (const [property, value] of Object.entries(data)) {
+      if (model && model[property]) {
+        const relatedType = model[property];
+        if (Array.isArray(value)) {
+          const ids = value as number[];
+          (instance as any)[property] = ids.map((id, _index) =>
+            this.getOrCreate(relatedType, id, key, property)
+          );
+        } else if (typeof value === 'number') {
+          (instance as any)[property] = this.getOrCreate(relatedType, value, key, property);
+        }
+      } else {
+        (instance as any)[property] = value;
+      }
+    }
+    this.index[key] = { ...instance };
+    this.changeRef(key);
+  }
+
+  public rollbackOptimisticUpdate(instanceType: string, instanceId: number, previousState: InstanceType): void {
+    const key = `${instanceType}:${instanceId}`;
+    this.index[key] = { ...previousState };
+    this.changeRef(key);
+  }
+
+  public addTempInstance(
+    instanceType: string,
+    tempId: number,
+    parentType: string,
+    parentId: number,
+    relationName: string,
+    data: Record<string, unknown>,
+  ): void {
+    const tempKey = `${instanceType}:${tempId}`;
+    const parentKey = `${parentType}:${parentId}`;
+
+    const tempInstance: TempInstance = {
+      id: tempId,
+      _instance_type: instanceType,
+      _operation: 'create',
+      _tstamp: Date.now() / 1000,
+      _loaded: true,
+      ...data,
+    } as TempInstance;
+
+    this.index[tempKey] = tempInstance as InstanceType;
+    this.refs[tempKey] = [];
+
+    const parent = this.index[parentKey];
+    if (parent) {
+      const relation = (parent as any)[relationName];
+      if (Array.isArray(relation)) {
+        (parent as any)[relationName] = [tempInstance as InstanceType, ...relation];
+        this.refs[tempKey].push({ property: relationName, referrerKey: parentKey });
+      }
+      this.index[parentKey] = { ...parent };
+      this.changeRef(parentKey);
+    }
+  }
+
+  public removeTempInstance(instanceType: string, tempId: number): void {
+    const tempKey = `${instanceType}:${tempId}`;
+    const refs = this.refs[tempKey];
+
+    if (refs) {
+      for (const ref of refs) {
+        const parent = this.index[ref.referrerKey];
+        if (parent) {
+          const relation = (parent as any)[ref.property];
+          if (Array.isArray(relation)) {
+            const filtered = relation.filter(
+              (obj: InstanceType) => obj.id !== tempId
+            );
+            const model = this.model[(parent as any)._instance_type];
+            if (model && model[ref.property]) {
+              this.attachArrayCreate(filtered, model[ref.property], (parent as any)._instance_type, parent.id, ref.property);
+            }
+            (parent as any)[ref.property] = filtered;
+          }
+          this.index[ref.referrerKey] = { ...parent };
+          this.changeRef(ref.referrerKey);
+        }
+      }
+    }
+
+    delete this.index[tempKey];
+    delete this.refs[tempKey];
+  }
+
+  public applyOptimisticDelete(instanceType: string, instanceId: number): void {
+    const key = `${instanceType}:${instanceId}`;
+    const refs = this.refs[key];
+
+    if (refs) {
+      for (const ref of refs) {
+        const parent = this.index[ref.referrerKey];
+        if (parent) {
+          const relation = (parent as any)[ref.property];
+          if (Array.isArray(relation)) {
+            const filtered = relation.filter(
+              (obj: InstanceType) => obj.id !== instanceId
+            );
+            const model = this.model[(parent as any)._instance_type];
+            if (model && model[ref.property]) {
+              this.attachArrayCreate(filtered, model[ref.property], (parent as any)._instance_type, parent.id, ref.property);
+            }
+            (parent as any)[ref.property] = filtered;
+          } else {
+            (parent as any)[ref.property] = null;
+          }
+          this.index[ref.referrerKey] = { ...parent };
+          this.changeRef(ref.referrerKey);
+        }
+      }
+    }
+
+    delete this.index[key];
+    delete this.refs[key];
+  }
+
+  public getParentInfo(key: string): ParentInfo | null {
+    const refs = this.refs[key];
+    if (!refs || refs.length === 0) return null;
+
+    const ref = refs[0];
+    const parentKey = ref.referrerKey;
+    const [parentType, parentIdStr] = parentKey.split(':');
+    const parentId = parseInt(parentIdStr, 10);
+
+    return {
+      parentType,
+      parentId,
+      relationName: ref.property,
+    };
+  }
+
+  public rollbackOptimisticDelete(
+    instanceType: string,
+    instanceId: number,
+    previousState: InstanceType,
+    parentType: string,
+    parentId: number,
+    relationName: string,
+  ): void {
+    const key = `${instanceType}:${instanceId}`;
+    const parentKey = `${parentType}:${parentId}`;
+
+    this.index[key] = { ...previousState };
+    this.refs[key] = [];
+
+    const parent = this.index[parentKey];
+    if (parent) {
+      const relation = (parent as any)[relationName];
+      if (Array.isArray(relation)) {
+        (parent as any)[relationName] = [...relation, previousState];
+      } else {
+        (parent as any)[relationName] = previousState;
+      }
+      this.refs[key].push({ property: relationName, referrerKey: parentKey });
+      this.index[parentKey] = { ...parent };
+      this.changeRef(parentKey);
+    }
   }
 
 }

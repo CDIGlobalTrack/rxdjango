@@ -2,6 +2,30 @@ export type Listener<T> = (state: T) => void;
 export type InstanceListener = (instance: InstanceType) => void;
 export type NoConnectionListener = (no_connection_since: Date | undefined) => void;
 
+export type Saveable<T extends InstanceType, P = Partial<T>> = T & {
+  save(data: P): Promise<void>;
+};
+
+export type Deleteable<T extends InstanceType> = T & {
+  delete(): Promise<void>;
+};
+
+export type Creatable<T extends InstanceType, P = Partial<T>> = T[] & {
+  create(data?: P): Promise<number>;
+};
+
+// Writable declaration: maps instance types to allowed operations
+export type Writable = {
+  [key: string]: readonly ('save' | 'create' | 'delete')[];
+}
+
+// Write callbacks passed to StateBuilder for attaching write methods to instances/arrays
+export type WriteCallbacks = {
+  saveInstance: (instanceType: string, instanceId: number, data: Record<string, unknown>) => Promise<void>;
+  createInstance: (instanceType: string, parentType: string, parentId: number, relationName: string, data?: Record<string, unknown>) => Promise<number>;
+  deleteInstance: (instanceType: string, instanceId: number) => Promise<void>;
+}
+
 // The model for a channel contains which fields for each instance type are references
 // to other types.
 // Key is the _instance_type field (something like myapp.serializer.MyModelSerializer)

@@ -60,3 +60,13 @@ class ActionNotAsync(Exception):
     initialization if a synchronous method is decorated with ``@action``.
     """
     pass
+
+
+class WriteError(Exception):
+    """Raised when a write operation (save, create, delete) fails.
+
+    Occurs during optimistic update operations when the requested
+    instance cannot be found, the operation is malformed, or a
+    related object does not exist.
+    """
+    pass

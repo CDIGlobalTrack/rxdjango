@@ -4,9 +4,9 @@ import {
   ProjectType,
   ANCHOR,
   MODEL,
-  ProjectPayload,
-  CustomerPayload,
-  TaskPayload,
+  ProjectTestData,
+  CustomerTestData,
+  TaskTestData,
   UserType,
 } from './StateBuilder.mock'
 
@@ -74,12 +74,12 @@ describe('StateBuilder', () => {
   });
 
   it('loads related sets when data is received', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       tasks: [1, 2, 3],
     };
-    const taskInstance: TaskPayload = {
+    const taskInstance: TaskTestData = {
       ...header('TaskSerializer', 1),
       taskName: 'Task #1',
     };
@@ -96,12 +96,12 @@ describe('StateBuilder', () => {
   });
 
   it('changes the object reference when it is loaded', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       tasks: [1, 2, 3],
     };
-    const taskInstance: TaskPayload = {
+    const taskInstance: TaskTestData = {
       ...header('TaskSerializer', 1),
       taskName: 'Task #1',
     };
@@ -119,24 +119,24 @@ describe('StateBuilder', () => {
   });
 
   it('changes the middle node reference when child node is updated', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       customer: 2,
     };
 
-    const customerInstance: CustomerPayload = {
+    const customerInstance: CustomerTestData = {
       ...header('CustomerSerializer', 2),
       customerName: 'Customer #2',
       tasks: [1, 2, 3],
     };
 
-    const task1: TaskPayload = {
+    const task1: TaskTestData = {
       ...header('TaskSerializer', 1),
       taskName: 'Task #1',
     };
 
-    const task2: TaskPayload = {
+    const task2: TaskTestData = {
       ...header('TaskSerializer', 2),
       taskName: 'Task #2',
     };
@@ -155,14 +155,14 @@ describe('StateBuilder', () => {
   });
 
   it('changes the set reference if some child instance changes', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       customer: 2,
       tasks: [1]
     };
 
-    const customerInstance: CustomerPayload = {
+    const customerInstance: CustomerTestData = {
       ...header('CustomerSerializer', 2),
       customerName: 'Customer #2',
       tasks: [1],
@@ -173,7 +173,7 @@ describe('StateBuilder', () => {
       username: 'User #1',
     };
 
-    const taskInstance: TaskPayload = {
+    const taskInstance: TaskTestData = {
       ...header('TaskSerializer', 1),
       taskName: 'Task #1',
       user: 1,
@@ -201,7 +201,7 @@ describe('StateBuilder', () => {
   });
 
   it('initializes foreign key with unloaded object', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       customer: 1,
@@ -213,12 +213,12 @@ describe('StateBuilder', () => {
   });
 
   it('loads foreign key when it arrives, changing reference', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       customer: 5,
     };
-    const customerInstance: CustomerPayload = {
+    const customerInstance: CustomerTestData = {
       ...header('CustomerSerializer', 5),
       customerName: 'Customer #5',
     };
@@ -271,12 +271,12 @@ describe('StateBuilder', () => {
   });
 
   it('deletes parent reference when object is deleted', () => {
-    const projectInstance: ProjectPayload = {
+    const projectInstance: ProjectTestData = {
       ...header('ProjectSerializer', 1),
       projectName: 'Project #1',
       tasks: [1, 2, 3],
     };
-    const taskInstances: TaskPayload[] = [{
+    const taskInstances: TaskTestData[] = [{
       ...header('TaskSerializer', 1),
       taskName: 'Task #1',
     }, {
@@ -298,4 +298,112 @@ describe('StateBuilder', () => {
     expect(state.tasks[1].id).toBe(3);
   });
 
+});
+
+describe('StateBuilder removeTempInstance preserves .create()', () => {
+  const TASK_TYPE = 'project.serializers.TaskSerializer';
+  const PROJECT_TYPE = 'project.serializers.ProjectSerializer';
+
+  const writable = {
+    [TASK_TYPE]: ['create', 'save', 'delete'] as const,
+  };
+
+  const writeCallbacks = {
+    saveInstance: jest.fn().mockResolvedValue(undefined),
+    createInstance: jest.fn().mockResolvedValue(-1),
+    deleteInstance: jest.fn().mockResolvedValue(undefined),
+  };
+
+  it('relation array has .create() after removeTempInstance rollback', () => {
+    const stateBuilder = new StateBuilder<ProjectType>(
+      MODEL, ANCHOR, false, writable, writeCallbacks,
+    );
+
+    // Load a project with one task
+    stateBuilder.update([{
+      id: 1,
+      _instance_type: PROJECT_TYPE,
+      _operation: 'create',
+      _tstamp: 1,
+      projectName: 'Project #1',
+      tasks: [1],
+      customer: null,
+    } as any]);
+
+    stateBuilder.update([{
+      id: 1,
+      _instance_type: TASK_TYPE,
+      _operation: 'create',
+      _tstamp: 1,
+      taskName: 'Task #1',
+    } as any]);
+
+    // Verify .create() is attached to the tasks array
+    let state = stateBuilder.state! as ProjectType;
+    expect((state.tasks as any).create).toBeDefined();
+
+    // Simulate optimistic create (adds temp instance with negative id)
+    stateBuilder.addTempInstance(TASK_TYPE, -1, PROJECT_TYPE, 1, 'tasks', {
+      taskName: 'Temp Task',
+    });
+
+    state = stateBuilder.state! as ProjectType;
+    expect(state.tasks.length).toBe(2);
+
+    // Simulate rollback: server rejected, remove temp instance
+    stateBuilder.removeTempInstance(TASK_TYPE, -1);
+
+    state = stateBuilder.state! as ProjectType;
+    expect(state.tasks.length).toBe(1);
+
+    // BUG: .create() should still be on the array after rollback
+    expect((state.tasks as any).create).toBeDefined();
+  });
+
+  it('relation array has .create() after applyOptimisticDelete rollback', () => {
+    const stateBuilder = new StateBuilder<ProjectType>(
+      MODEL, ANCHOR, false, writable, writeCallbacks,
+    );
+
+    // Load a project with two tasks
+    stateBuilder.update([{
+      id: 1,
+      _instance_type: PROJECT_TYPE,
+      _operation: 'create',
+      _tstamp: 1,
+      projectName: 'Project #1',
+      tasks: [1, 2],
+      customer: null,
+    } as any]);
+
+    stateBuilder.update([
+      {
+        id: 1,
+        _instance_type: TASK_TYPE,
+        _operation: 'create',
+        _tstamp: 1,
+        taskName: 'Task #1',
+      } as any,
+      {
+        id: 2,
+        _instance_type: TASK_TYPE,
+        _operation: 'create',
+        _tstamp: 1,
+        taskName: 'Task #2',
+      } as any,
+    ]);
+
+    // Verify .create() is attached
+    let state = stateBuilder.state! as ProjectType;
+    expect((state.tasks as any).create).toBeDefined();
+
+    // Simulate optimistic delete
+    stateBuilder.applyOptimisticDelete(TASK_TYPE, 2);
+
+    state = stateBuilder.state! as ProjectType;
+    expect(state.tasks.length).toBe(1);
+
+    // BUG: .create() should still be on the array after optimistic delete
+    expect((state.tasks as any).create).toBeDefined();
+  });
 });

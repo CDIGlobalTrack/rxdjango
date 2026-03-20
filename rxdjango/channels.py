@@ -18,6 +18,7 @@ from .websocket_router import WebsocketRouter
 from .signal_handler import SignalHandler
 from .redis import RedisStateSession
 from .mongo import MongoStateSession
+from .operations import Operation
 from .serialize import json_dumps
 
 
@@ -90,6 +91,25 @@ class ContextChannelMeta(type):
             )
         else:
             active_flag = None
+
+        # Parse writable declarations
+        writable = getattr(meta, 'writable', {})
+        writable_map = {}
+        for serializer_class, operations in writable.items():
+            instance_type = '.'.join([
+                serializer_class.__module__,
+                serializer_class.__name__,
+            ])
+            resolved = []
+            for op in operations:
+                if not isinstance(op, Operation):
+                    raise ProgrammingError(
+                        f"Invalid operation {op!r} in writable for {serializer_class.__name__}. "
+                        f"Use SAVE, CREATE, DELETE from rxdjango.operations."
+                    )
+                resolved.append(op)
+            writable_map[instance_type] = resolved
+        new_class._writable = writable_map
 
         # Attach the state model, websocket router, and signal handler.
         new_class.meta = meta
@@ -255,6 +275,60 @@ class ContextChannel(metaclass=ContextChannelMeta):
     async def on_disconnect(self) -> None:
         """Called when user disconnects"""
         pass
+
+    def can_save(
+        self,
+        instance: Model,
+        data: dict[str, Any],
+    ) -> bool:
+        """Check if the current user may update an existing instance.
+
+        Called before applying instance.save() from the frontend.
+        `instance` is loaded from the database (pre-update state).
+        `data` is the partial field dict being applied.
+
+        Return True to allow, False to deny and roll back the
+        optimistic update on the client.
+
+        Default: False.
+        """
+        return False
+
+    def can_create(
+        self,
+        model_class: type[Model],
+        parent: Model,
+        data: dict[str, Any],
+    ) -> bool:
+        """Check if the current user may create a new child instance.
+
+        Called before processing instance.child_set.create() from the frontend.
+        `model_class` is the child model being instantiated.
+        `parent` is the loaded parent instance that owns the relation.
+        `data` is the field dict from the frontend.
+
+        Return True to allow, False to deny and remove the temporary
+        instance from the client.
+
+        Default: False.
+        """
+        return False
+
+    def can_delete(
+        self,
+        instance: Model,
+    ) -> bool:
+        """Check if the current user may delete an existing instance.
+
+        Called before processing instance.delete() from the frontend.
+        `instance` is loaded from the database.
+
+        Return True to allow, False to deny and restore the instance
+        on the client.
+
+        Default: False.
+        """
+        return False
 
     RX_CACHE_TTL_DEFAULT = 7 * 24 * 3600  # 1 week
 

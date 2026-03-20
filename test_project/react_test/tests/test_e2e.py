@@ -7,6 +7,7 @@ import json
 import asyncio
 import threading
 import socket
+import re
 from pathlib import Path
 
 from django.test import TestCase, TransactionTestCase
@@ -50,6 +51,20 @@ class E2ETestCase(TestCase):
                 shutil.copytree(node_modules_src, node_modules_dst)
 
             dist_src = self.rxdjango_react_dir / 'dist'
+            if not dist_src.exists():
+                result = subprocess.run(
+                    ['npm', 'run', 'build'],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(self.rxdjango_react_dir),
+                )
+                if result.returncode != 0:
+                    self.fail(
+                        f"Failed to build rxdjango-react:\n"
+                        f"stdout: {result.stdout}\n"
+                        f"stderr: {result.stderr}"
+                    )
+
             dist_dst = tmpdir / 'node_modules' / '@rxdjango' / 'react'
             if dist_src.exists():
                 os.makedirs(dist_dst, exist_ok=True)
@@ -134,6 +149,43 @@ class E2ETestCase(TestCase):
         self.assertIn("callAction('create_task'", content)
         self.assertIn("callAction('rename_asset'", content)
         self.assertIn("callAction('delete_asset'", content)
+
+    def test_generated_channel_has_writable(self):
+        """Test that generated channel has writable property from Meta.writable."""
+        self._run_makefrontend()
+
+        channels_ts = self.frontend_dir / 'react_test' / 'react_test.channels.ts'
+        content = channels_ts.read_text()
+
+        self.assertIn('writable = {', content, "Should have writable property")
+        self.assertIn('"react_test.serializers.TaskSerializer"', content)
+        self.assertIn('"react_test.serializers.AssetSerializer"', content)
+        self.assertIn('"save"', content)
+        self.assertIn('"create"', content)
+        self.assertIn('"delete"', content)
+
+    def test_generated_task_payload_uses_number_for_pk_related_field(self):
+        """Writable payloads should type FK fields as numbers, not live queryset IDs."""
+        project = Project.objects.create(name="Payload Type Project")
+        job1 = Job.objects.create(project=project, name="Payload Type Job 1")
+        job2 = Job.objects.create(project=project, name="Payload Type Job 2")
+
+        self._run_makefrontend()
+
+        channels_ts = self.frontend_dir / 'react_test' / 'react_test.channels.ts'
+        content = channels_ts.read_text()
+
+        match = re.search(
+            r'export type TaskPayload = \{\n(?P<body>.*?)\n\};',
+            content,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(match, "TaskPayload should be generated")
+
+        payload_body = match.group('body')
+        self.assertIn('  job?: number;', payload_body)
+        self.assertNotIn(f'job?: {job1.id}', payload_body)
+        self.assertNotIn(f'job?: {job2.id}', payload_body)
 
 
 T = 1

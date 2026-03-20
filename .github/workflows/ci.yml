@@ -45,11 +45,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+          cache-dependency-path: rxdjango-react/yarn.lock
+
+      - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
           pip install Pillow
           pip install -e .
+
+      - name: Install Node dependencies
+        working-directory: rxdjango-react
+        run: yarn install
 
       - name: Run integration tests
         working-directory: test_project

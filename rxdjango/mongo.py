@@ -26,6 +26,33 @@ from django.db import ProgrammingError
 from django.conf import settings
 from .redis import get_tstamp
 from .serialize import json_dumps
+
+_motor_client = None
+_motor_client_loop = None
+
+
+def get_motor_client():
+    """Return a shared AsyncIOMotorClient instance for the current event loop.
+
+    Motor's ``AsyncIOMotorClient`` manages its own connection pool internally,
+    so a single shared instance is the correct approach.  Creating a new client
+    per call would leak connections under load.
+
+    The client is recreated if the event loop changes (e.g. between test runs),
+    since Motor clients are bound to the loop they were created on.
+    """
+    global _motor_client, _motor_client_loop
+    import asyncio
+    try:
+        current_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        current_loop = None
+    if _motor_client is None or current_loop is not _motor_client_loop:
+        _motor_client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        _motor_client_loop = current_loop
+    return _motor_client
+
+
 try:
     from rxdjango.utils import delta_utils_c as delta_utils
 except ImportError:
@@ -62,7 +89,7 @@ class MongoStateSession:
         self.state_model = channel._state_model
         self._tstamp = None
 
-        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        client = get_motor_client()
         self.db = client[settings.MONGO_STATE_DB]
         self.collection = self.db[channel.__class__.__name__.lower()]
 
@@ -172,7 +199,7 @@ class MongoStateSession:
         Yields:
             list[dict]: Batches of instance dicts, one batch per model layer.
         """
-        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        client = get_motor_client()
         db = client[settings.MONGO_STATE_DB]
         collection = db[channel_class.__name__.lower()]
 
@@ -200,7 +227,7 @@ class MongoStateSession:
             channel_class: The ContextChannel subclass whose collection to clear.
             anchor_id: The anchor ID whose cached state should be deleted.
         """
-        client = motor_asyncio.AsyncIOMotorClient(settings.MONGO_URL)
+        client = get_motor_client()
         db = client[settings.MONGO_STATE_DB]
         collection = db[channel_class.__name__.lower()]
         query = {'_anchor_id': anchor_id}

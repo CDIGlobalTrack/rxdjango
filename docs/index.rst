@@ -17,6 +17,7 @@ be implemented.
    architecture-overview
    using-rxdjango
    context-channel
+   optimistic-updates
    makefrontend
    caching
    api-reference

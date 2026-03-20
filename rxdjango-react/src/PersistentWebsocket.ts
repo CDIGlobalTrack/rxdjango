@@ -3,7 +3,7 @@ import {
   TempInstance,
   SystemMessage,
 } from './ContextChannel.interfaces';
-import { ActionResponse } from './actions.d';
+import { ActionResponse, WriteResponse } from './actions.d';
 
 
 /** Reasons that permanently prevent WebSocket reconnection. */
@@ -52,6 +52,7 @@ export default class PersistentWebSocket {
   public onInitialAnchors: (anchors: number[]) => void = () => {};
   public onInstances: (instances: TempInstance[]) => void = () => {};
   public onActionResponse: (response: ActionResponse<unknown>) => void = () => {};
+  public onWriteResponse: (response: WriteResponse) => void = () => {};
   public onAnchorPrepend: (anchorId: number) => void = () => {};
   public onSystem: (message: SystemMessage) => void = () => {};
   public onConnected: () => void = () => {};
@@ -138,6 +139,10 @@ export default class PersistentWebSocket {
 
         case 'actionResponse':
           this.onActionResponse(message as ActionResponse<unknown>);
+          break;
+
+        case 'writeResponse':
+          this.onWriteResponse(message as WriteResponse);
           break;
 
         case 'runtimeVar':

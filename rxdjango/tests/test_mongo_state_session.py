@@ -38,7 +38,8 @@ def make_session(anchor_id=5):
     mock_model.instance_type = 'test.Serializer'
     channel._state_model.models.return_value = [mock_model]
 
-    with patch('rxdjango.mongo.motor_asyncio.AsyncIOMotorClient'):
+    with patch('rxdjango.mongo.get_motor_client') as mock_client:
+        mock_client.return_value = MagicMock()
         from rxdjango.mongo import MongoStateSession
         session = MongoStateSession(channel, anchor_id)
 
