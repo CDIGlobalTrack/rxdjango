@@ -163,6 +163,13 @@ class E2ETestCase(TestCase):
         self.assertIn('"save"', content)
         self.assertIn('"create"', content)
         self.assertIn('"delete"', content)
+        self.assertIn('type JobNestedState = Omit<Saveable<JobNestedType, JobNestedPayload>,', content)
+        self.assertIn("  'asset_set' |", content)
+        self.assertIn("  'tasks'", content)
+        self.assertIn('> & {', content)
+        self.assertIn('  asset_set: Creatable<WritableAsset, AssetPayload>;', content)
+        self.assertIn('  tasks: Creatable<WritableTask, TaskPayload>;', content)
+        self.assertIn('};', content)
 
     def test_generated_task_payload_uses_number_for_pk_related_field(self):
         """Writable payloads should type FK fields as numbers, not live queryset IDs."""

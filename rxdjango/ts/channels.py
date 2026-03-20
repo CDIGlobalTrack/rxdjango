@@ -43,27 +43,24 @@ def create_app_channels(app, apply_changes=True, force=False):
 
     import_types = defaultdict(list)
     body = []
-    has_writable = False
+    helper_imports = set()
 
     for urlpattern in consumer_urlpatterns:
         consumer_class = urlpattern.callback.consumer_class
         context_channel_class = consumer_class.context_channel_class
-        class_code, writable_used = generate_ts_class(
+        class_code, class_helper_imports = generate_ts_class(
             context_channel_class, urlpattern, import_types,
         )
-        has_writable = has_writable or writable_used
+        helper_imports.update(class_helper_imports)
         body.append('\n')
         body.extend(class_code)
 
     if not body:
         return
 
-    if has_writable:
-        rxdjango_imports = 'ContextChannel, Saveable, Deleteable, Creatable'
-    else:
-        rxdjango_imports = 'ContextChannel'
+    rxdjango_imports = ['ContextChannel', *sorted(helper_imports)]
     code.extend([
-        f"import {{ {rxdjango_imports} }} from '@rxdjango/react';\n",
+        f"import {{ {', '.join(rxdjango_imports)} }} from '@rxdjango/react';\n",
         f'const SOCKET_URL = {settings.RX_WEBSOCKET_URL};',
     ])
 
@@ -270,13 +267,15 @@ def _generate_payload_lines(payload_name, model_node):
 def _build_writable_types(state_model, writable, import_types):
     """Walk the state model tree and generate channel-specific writable types.
 
-    Returns (type_lines, state_type_name_or_none) where type_lines is a list
-    of TypeScript type alias lines to emit before the class, and
-    state_type_name_or_none is the channel-specific state type name if any
-    writable types exist, or None if the channel is fully read-only.
+    Returns (type_lines, state_type_name_or_none, helper_imports) where
+    type_lines is a list of TypeScript type alias lines to emit before the
+    class, state_type_name_or_none is the channel-specific state type name if
+    any writable types exist, or None if the channel is fully read-only, and
+    helper_imports is the subset of Saveable/Deleteable/Creatable actually
+    referenced by the generated types.
     """
     if not writable:
-        return [], None
+        return [], None, set()
 
     # Collect which instance_types are writable and their operations
     # writable is { instance_type_str: [ops] }
@@ -298,24 +297,10 @@ def _build_writable_types(state_model, writable, import_types):
         import_types[app].append(serializer_class)
 
     if not writable_info:
-        return [], None
+        return [], None, set()
 
-    # For each writable type, check if it has children that are also writable.
-    # If so, the writable type needs Omit to replace those relation fields.
     type_lines = []
-    # Track which writable types have writable children (need Omit)
-    writable_children = {}  # instance_type -> { field_name: child_instance_type }
-    for instance_type in writable_info:
-        nodes = state_model.index.get(instance_type, [])
-        if not nodes:
-            continue
-        node = nodes[0]
-        wchildren = {}
-        for field_name, child_node in node.children.items():
-            if child_node.instance_type in writable_info:
-                wchildren[field_name] = child_node.instance_type
-        if wchildren:
-            writable_children[instance_type] = wchildren
+    helper_imports = set()
 
     # Emit payload types first — one per writable serializer
     for instance_type in writable_info:
@@ -326,109 +311,183 @@ def _build_writable_types(state_model, writable, import_types):
         type_lines.extend(_generate_payload_lines(ptype_name, nodes[0]))
         type_lines.append('')
 
-    # The anchor type's writable alias is redundant — the state type covers it.
-    # Skip emitting it separately.
     anchor_type = state_model.instance_type
-
-    # Emit writable type aliases (leaf types first, then types with writable children)
     emitted = set()
 
-    def _build_omit_type(inner, wchildren, parent_instance_type):
-        """Build an Omit<Base, 'field1' | 'field2'> & { ... } type string."""
-        omit_fields = ' | '.join(f"'{f}'" for f in sorted(wchildren.keys()))
-        parts = []
-        nodes = state_model.index.get(parent_instance_type, [])
-        node = nodes[0]
-        for field_name, child_it in sorted(wchildren.items()):
-            _, child_wtype, child_ptype, child_ops = writable_info[child_it]
-            child_node = node.children[field_name]
-            if child_node.many and Operation.CREATE in child_ops:
-                parts.append(f'{field_name}: Creatable<{child_wtype}, {child_ptype}>')
-            elif child_node.many:
-                parts.append(f'{field_name}: {child_wtype}[]')
-            else:
-                parts.append(f'{field_name}: {child_wtype}')
-        fields_str = '; '.join(parts)
-        return f'Omit<{inner}, {omit_fields}> & {{ {fields_str} }}'
+    descendants_with_writable = {}
 
-    def emit_writable_type(instance_type):
-        if instance_type in emitted or instance_type == anchor_type:
-            return
-        # Emit children first
-        for child_it in writable_children.get(instance_type, {}).values():
-            emit_writable_type(child_it)
+    def has_writable_descendant(node):
+        cached = descendants_with_writable.get(node.instance_type)
+        if cached is not None:
+            return cached
 
-        iface_name, wtype_name, ptype_name, ops = writable_info[instance_type]
-        wchildren = writable_children.get(instance_type, {})
+        result = node.instance_type in writable_info or any(
+            has_writable_descendant(child)
+            for child in node.children.values()
+        )
+        descendants_with_writable[node.instance_type] = result
+        return result
 
-        # Build the base type with Saveable/Deleteable wrappers
+    def ensure_import(node):
+        serializer_class = node.nested_serializer.__class__
+        app = serializer_class.__module__.split('.')[0]
+        import_types[app].append(serializer_class)
+
+    def wrap_base_type(node):
+        ensure_import(node)
+        iface_name = interface_name(node.nested_serializer.__class__)
+        info = writable_info.get(node.instance_type)
+        if not info:
+            return iface_name
+
+        _, _, ptype_name, ops = info
         inner = iface_name
         if Operation.DELETE in ops:
+            helper_imports.add('Deleteable')
             inner = f'Deleteable<{inner}>'
         if Operation.SAVE in ops:
+            helper_imports.add('Saveable')
             inner = f'Saveable<{inner}, {ptype_name}>'
+        return inner
 
-        if wchildren:
-            rhs = _build_omit_type(inner, wchildren, instance_type)
-            type_lines.append(f'type {wtype_name} = {rhs};')
+    def build_field_type(child_node):
+        child_info = writable_info.get(child_node.instance_type)
+        if child_info:
+            _, child_wtype, child_ptype, child_ops = child_info
+            if child_node.many and Operation.CREATE in child_ops:
+                helper_imports.add('Creatable')
+                return f'Creatable<{child_wtype}, {child_ptype}>'
+            if child_node.many:
+                return f'{child_wtype}[]'
+            return child_wtype
+
+        child_expr = build_inline_expr(child_node)
+        if child_node.many:
+            return f'({child_expr})[]'
+        return child_expr
+
+    def render_type_expr(node, indent_level=0):
+        indent = '  ' * indent_level
+        base = wrap_base_type(node)
+        writable_fields = []
+        for field_name, child_node in sorted(node.children.items()):
+            if not has_writable_descendant(child_node):
+                continue
+            writable_fields.append((field_name, child_node))
+
+        if not writable_fields:
+            return [f'{indent}{base}']
+
+        lines = [f'{indent}Omit<{base},']
+        omit_fields = [
+            f"{'  ' * (indent_level + 1)}'{field_name}'"
+            for field_name, _ in writable_fields
+        ]
+        if len(omit_fields) == 1:
+            lines.append(omit_fields[0])
         else:
-            type_lines.append(f'type {wtype_name} = {inner};')
+            for omit_field in omit_fields[:-1]:
+                lines.append(f'{omit_field} |')
+            lines.append(omit_fields[-1])
+        lines.append(f'{indent}> & {{')
 
+        for field_name, child_node in writable_fields:
+            field_prefix = f"{'  ' * (indent_level + 1)}{field_name}: "
+            field_type_lines = render_field_type(child_node, indent_level + 2)
+            if len(field_type_lines) == 1:
+                lines.append(f"{field_prefix}{field_type_lines[0].strip()};")
+                continue
+
+            lines.append(f"{field_prefix}{field_type_lines[0].strip()}")
+            lines.extend(field_type_lines[1:])
+            lines[-1] = f'{lines[-1]};'
+
+        lines.append(f'{indent}}}')
+        return lines
+
+    def render_field_type(child_node, indent_level=0):
+        indent = '  ' * indent_level
+        child_info = writable_info.get(child_node.instance_type)
+        if child_info:
+            _, child_wtype, child_ptype, child_ops = child_info
+            if child_node.many and Operation.CREATE in child_ops:
+                helper_imports.add('Creatable')
+                return [f'{indent}Creatable<{child_wtype}, {child_ptype}>']
+            if child_node.many:
+                return [f'{indent}{child_wtype}[]']
+            return [f'{indent}{child_wtype}']
+
+        child_expr_lines = render_type_expr(child_node, indent_level)
+        if not child_node.many:
+            return child_expr_lines
+
+        if len(child_expr_lines) == 1:
+            return [f"{indent}({child_expr_lines[0].strip()})[]"]
+
+        return [
+            f'{indent}(',
+            *child_expr_lines,
+            f'{indent})[]',
+        ]
+
+    def build_inline_expr(node):
+        base = wrap_base_type(node)
+        writable_fields = []
+        for field_name, child_node in sorted(node.children.items()):
+            if not has_writable_descendant(child_node):
+                continue
+            writable_fields.append((field_name, build_field_type(child_node)))
+
+        if not writable_fields:
+            return base
+
+        omit_fields = ' | '.join(f"'{field_name}'" for field_name, _ in writable_fields)
+        fields_str = '; '.join(
+            f'{field_name}: {field_type}'
+            for field_name, field_type in writable_fields
+        )
+        return f'Omit<{base}, {omit_fields}> & {{ {fields_str} }}'
+
+    def emit_writable_types(node):
+        for child_node in node.children.values():
+            if has_writable_descendant(child_node):
+                emit_writable_types(child_node)
+
+        instance_type = node.instance_type
+        if instance_type == anchor_type or instance_type in emitted:
+            return
+        if instance_type not in writable_info:
+            return
+
+        _, wtype_name, _, _ = writable_info[instance_type]
+        expr_lines = render_type_expr(node)
+        type_lines.append(f'type {wtype_name} = {expr_lines[0].strip()}')
+        type_lines.extend(expr_lines[1:])
+        type_lines[-1] = f'{type_lines[-1]};'
         emitted.add(instance_type)
 
-    for instance_type in writable_info:
-        emit_writable_type(instance_type)
+    if not has_writable_descendant(state_model):
+        return type_lines, None, helper_imports
 
-    # Now build the channel-specific state type.
-    anchor_iface = interface_name(state_model.nested_serializer.__class__)
-    anchor_node = state_model
-
-    # Check if the anchor itself is writable
-    anchor_writable = anchor_type in writable_info
-
-    # Collect relation fields on the anchor that point to writable children
-    anchor_writable_fields = {}
-    for field_name, child_node in anchor_node.children.items():
-        if child_node.instance_type in writable_info:
-            anchor_writable_fields[field_name] = child_node
-
-    if not anchor_writable_fields and not anchor_writable:
-        return type_lines, None
+    emit_writable_types(state_model)
 
     # Build the state type name from the anchor serializer
     channel_name = state_model.nested_serializer.__class__.__name__
     channel_name = channel_name.replace('Serializer', '')
     state_type_name = f'{channel_name}State'
+    expr_lines = render_type_expr(state_model)
+    type_lines.append(f'type {state_type_name} = {expr_lines[0].strip()}')
+    type_lines.extend(expr_lines[1:])
+    type_lines[-1] = f'{type_lines[-1]};'
 
-    if anchor_writable:
-        _, _, anchor_ptype, anchor_ops = writable_info[anchor_type]
-        base = anchor_iface
-        if Operation.DELETE in anchor_ops:
-            base = f'Deleteable<{base}>'
-        if Operation.SAVE in anchor_ops:
-            base = f'Saveable<{base}, {anchor_ptype}>'
-    else:
-        base = anchor_iface
-
-    if anchor_writable_fields:
-        rhs = _build_omit_type(base, {
-            f: child.instance_type
-            for f, child in anchor_writable_fields.items()
-        }, anchor_type)
-        type_lines.append(f'type {state_type_name} = {rhs};')
-    elif anchor_writable:
-        type_lines.append(f'type {state_type_name} = {base};')
-    else:
-        return type_lines, None
-
-    return type_lines, state_type_name
+    return type_lines, state_type_name, helper_imports
 
 
 def generate_ts_class(context_channel_class, urlpattern, import_types):
     """Generate TypeScript class code for a ContextChannel.
 
-    Returns (code_lines, writable_used) where writable_used is True if
-    Saveable/Deleteable/Creatable helper types are needed in imports.
+    Returns (code_lines, helper_imports) where helper_imports is the subset of
+    Saveable/Deleteable/Creatable needed in imports.
     """
     # First, we get the endpoint pattern and the parameters from our previous function
     endpoint, parameters = pattern_to_ts(urlpattern)
@@ -450,10 +509,9 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     # Build channel-specific writable types
     writable = getattr(context_channel_class, '_writable', {})
-    writable_type_lines, writable_state_type = _build_writable_types(
+    writable_type_lines, writable_state_type, helper_imports = _build_writable_types(
         context_channel_class._state_model, writable, import_types,
     )
-    writable_used = bool(writable_type_lines)
 
     if writable_state_type:
         state_type = writable_state_type
@@ -556,4 +614,4 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     code.append("}")
 
-    return code, writable_used
+    return code, helper_imports
