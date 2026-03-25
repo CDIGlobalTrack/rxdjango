@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Deny access by default when `ContextChannel.has_permission()` or `is_visible()` are not overridden
+- Validate action RPC parameter counts and basic runtime types before invoking channel actions
+
 ## [0.0.44] - 2026-02-19
 
 ### Changed

@@ -173,12 +173,16 @@ INSTALLED_APPS = [
 ]
 
 ASGI_APPLICATION = 'your_project.asgi.application'
-REDIS_URL = 'redis://127.0.0.1:6379/0'
-MONGO_URL = 'mongodb://localhost:27017/'
+REDIS_URL = 'redis://:strong-password@127.0.0.1:6379/0'
+MONGO_URL = 'mongodb://app-user:strong-password@127.0.0.1:27017/?authSource=admin'
 MONGO_STATE_DB = 'hot_state'
 RX_FRONTEND_DIR = os.path.join(BASE_DIR, '../frontend/src/app/modules')
 RX_WEBSOCKET_URL = "http://localhost:8000/ws"
 ```
+
+RxDjango emits system-check warnings when `REDIS_URL` or `MONGO_URL` do not
+include credentials. Unauthenticated local development may be acceptable, but
+production deployments should always require auth.
 
 ## Common Patterns
 

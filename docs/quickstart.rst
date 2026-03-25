@@ -48,7 +48,7 @@ RxDjango depends on Redis for messaging. Configure REDIS_URL.
 
 .. code-block:: python
 
-    REDIS_URL = f'redis://127.0.0.1:6379/0'
+    REDIS_URL = 'redis://:strong-password@127.0.0.1:6379/0'
 
 Configure MongoDB for Caching
 =============================
@@ -57,8 +57,12 @@ RxDjango comes with a native cache system using MongoDB.
 
 .. code-block:: python
 
-    MONGO_URL = 'mongodb://localhost:27017/'
+    MONGO_URL = 'mongodb://app-user:strong-password@127.0.0.1:27017/?authSource=admin'
     MONGO_STATE_DB = 'hot_state'
+
+RxDjango emits a system-check warning when either URL is configured without
+credentials. Unauthenticated localhost services may be acceptable for isolated
+development, but production deployments should always require auth.
 
 Configure Frontend Code Generation
 ==================================

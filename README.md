@@ -50,15 +50,19 @@ Set the ASGI_APPLICATION variable
 RxDjango depends on Redis for messaging. Configure REDIS_URL.
 
    ```python
-   REDIS_URL = f'redis://127.0.0.1:6379/0'
+   REDIS_URL = 'redis://:strong-password@127.0.0.1:6379/0'
    ```
 
 RxDjango comes with a native cache system using MongoDB.
 
    ```python
-   MONGO_URL = 'mongodb://localhost:27017/'
+   MONGO_URL = 'mongodb://app-user:strong-password@127.0.0.1:27017/?authSource=admin'
    MONGO_STATE_DB = 'hot_state'
    ```
+
+RxDjango warns when `REDIS_URL` or `MONGO_URL` are configured without
+credentials. Local unauthenticated services may be fine for isolated
+development, but production deployments should always require auth.
 
 Typescript interfaces and classes for the frontend to communicate with
 backend will automatically be generated. For that, you need to configure

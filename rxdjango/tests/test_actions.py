@@ -9,8 +9,14 @@ from datetime import datetime
 
 import pytest
 
-from rxdjango.actions import action, list_actions, execute_action, _verify_method
-from rxdjango.exceptions import ForbiddenError, ActionNotAsync
+from rxdjango.actions import (
+    ActionValidationError,
+    _verify_method,
+    action,
+    execute_action,
+    list_actions,
+)
+from rxdjango.exceptions import ActionNotAsync, ForbiddenError
 
 
 def _run(coro):
@@ -170,3 +176,43 @@ class TestExecuteAction:
         channel = FakeChannel()
         with pytest.raises(ForbiddenError):
             _run(execute_action(channel, 'secret_method', []))
+
+    def test_execute_rejects_too_many_params(self):
+        @action
+        async def do_something(self, name: str, count: int):
+            return {'name': name, 'count': count}
+
+        channel = type('FakeChannel', (), {'do_something': do_something})()
+
+        with pytest.raises(ActionValidationError, match='Expected at most 2 params, got 3'):
+            _run(execute_action(channel, 'do_something', ['hello', 5, 'extra']))
+
+    def test_execute_rejects_too_few_params(self):
+        @action
+        async def do_something(self, name: str, count: int):
+            return {'name': name, 'count': count}
+
+        channel = type('FakeChannel', (), {'do_something': do_something})()
+
+        with pytest.raises(ActionValidationError, match='Expected at least 2 params, got 1'):
+            _run(execute_action(channel, 'do_something', ['hello']))
+
+    def test_execute_rejects_wrong_param_type(self):
+        @action
+        async def do_something(self, name: str, count: int):
+            return {'name': name, 'count': count}
+
+        channel = type('FakeChannel', (), {'do_something': do_something})()
+
+        with pytest.raises(ActionValidationError, match='Param "count" must be of type int'):
+            _run(execute_action(channel, 'do_something', ['hello', 'five']))
+
+    def test_execute_allows_optional_params_to_be_omitted(self):
+        @action
+        async def do_something(self, name: str, count: int = 1):
+            return {'name': name, 'count': count}
+
+        channel = type('FakeChannel', (), {'do_something': do_something})()
+        result = _run(execute_action(channel, 'do_something', ['hello']))
+
+        assert result == {'name': 'hello', 'count': 1}

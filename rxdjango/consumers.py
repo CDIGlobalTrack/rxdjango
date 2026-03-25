@@ -63,17 +63,20 @@ Outgoing messages (server -> client)::
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Callable
 from django.contrib.auth.models import AbstractBaseUser
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from rest_framework.authtoken.models import Token
 from .state_loader import StateLoader
-from .actions import execute_action
+from .actions import ActionValidationError, execute_action
 from .write import execute_save, execute_create, execute_delete
 from .exceptions import UnauthorizedError, ForbiddenError, AnchorDoesNotExist, WriteError
 from .redis import RedisSession
 from rxdjango.serialize import json_dumps
+
+logger = logging.getLogger('rxdjango')
 
 
 class StateConsumer(AsyncWebsocketConsumer):
@@ -404,13 +407,36 @@ class StateConsumer(AsyncWebsocketConsumer):
             result = await execute_action(self.channel, method_name, params)
             response = {'type': 'actionResponse', 'callId': call_id, 'result': result}
             await self.send(text_data=json.dumps(response))
-        except Exception as e:
+        except ForbiddenError as e:
             response = {
                 'type': 'actionResponse',
                 'callId': call_id,
                 'error': {
-                    'code': getattr(e, 'code', 500),
-                    'message': str(e) or type(e).__name__,
+                    'code': 403,
+                    'message': str(e) or 'Permission denied',
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+            raise
+        except ActionValidationError as e:
+            response = {
+                'type': 'actionResponse',
+                'callId': call_id,
+                'error': {
+                    'code': 400,
+                    'message': str(e) or 'Invalid action parameters',
+                },
+            }
+            await self.send(text_data=json.dumps(response))
+            raise
+        except Exception:
+            logger.exception('Action %s failed', method_name)
+            response = {
+                'type': 'actionResponse',
+                'callId': call_id,
+                'error': {
+                    'code': 500,
+                    'message': 'Internal server error',
                 },
             }
             await self.send(text_data=json.dumps(response))
@@ -478,14 +504,15 @@ class StateConsumer(AsyncWebsocketConsumer):
             }
             await self.send(text_data=json.dumps(response))
 
-        except Exception as e:
+        except Exception:
+            logger.exception('Write operation %s failed', operation)
             response = {
                 'type': 'writeResponse',
                 'writeId': write_id,
                 'success': False,
                 'error': {
                     'code': 500,
-                    'message': str(e) or type(e).__name__,
+                    'message': 'Internal server error',
                 },
             }
             await self.send(text_data=json.dumps(response))

@@ -6,12 +6,16 @@ and StateConsumer message handling logic.
 """
 import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 import rxdjango.consumers as consumers_module
+from rxdjango.actions import action
+from rxdjango.channels import ContextChannel
 from rxdjango.consumers import StateConsumer, consumer, get_consumer_methods
+from rxdjango.exceptions import ForbiddenError
 
 CONSUMERS = getattr(consumers_module, '__CONSUMERS')
 
@@ -237,7 +241,7 @@ class TestStateConsumer:
         consumer.channel = object()
         consumer.send = AsyncMock()
 
-        with patch(
+        with patch('rxdjango.consumers.logger') as mock_logger, patch(
             'rxdjango.consumers.execute_action',
             new=AsyncMock(side_effect=RuntimeError('boom')),
         ):
@@ -248,9 +252,68 @@ class TestStateConsumer:
                     'params': [],
                 }))
 
+        mock_logger.exception.assert_called_once_with('Action %s failed', 'explode')
         consumer.send.assert_awaited_once()
         payload = json.loads(consumer.send.await_args.kwargs['text_data'])
-        assert payload == {'type': 'actionResponse', 'callId': 9, 'error': {'code': 500, 'message': 'boom'}}
+        assert payload == {
+            'type': 'actionResponse',
+            'callId': 9,
+            'error': {'code': 500, 'message': 'Internal server error'},
+        }
+
+    def test_receive_action_forbidden_preserves_message(self):
+        consumer = StateConsumer()
+        consumer.channel = object()
+        consumer.send = AsyncMock()
+
+        with patch(
+            'rxdjango.consumers.execute_action',
+            new=AsyncMock(side_effect=ForbiddenError('nope')),
+        ):
+            with pytest.raises(ForbiddenError, match='nope'):
+                _run(consumer.receive_action({
+                    'callId': 11,
+                    'action': 'explode',
+                    'params': [],
+                }))
+
+        consumer.send.assert_awaited_once()
+        payload = json.loads(consumer.send.await_args.kwargs['text_data'])
+        assert payload == {
+            'type': 'actionResponse',
+            'callId': 11,
+            'error': {'code': 403, 'message': 'nope'},
+        }
+
+    def test_receive_action_invalid_params_sends_400_and_reraises(self):
+        consumer = StateConsumer()
+        consumer.send = AsyncMock()
+
+        class FakeChannel:
+            @staticmethod
+            @action
+            async def do_thing(name: str, count: int):
+                return {'name': name, 'count': count}
+
+        consumer.channel = FakeChannel()
+
+        with pytest.raises(Exception, match='Param "count" must be of type int'):
+            _run(consumer.receive_action({
+                'callId': 10,
+                'action': 'do_thing',
+                'params': ['hello', 'five'],
+            }))
+
+        consumer.send.assert_awaited_once()
+        payload = json.loads(consumer.send.await_args.kwargs['text_data'])
+        assert payload == {
+            'type': 'actionResponse',
+            'callId': 10,
+            'error': {
+                'code': 400,
+                'message': 'Param "count" must be of type int',
+            },
+        }
 
     def test_receive_authentication_without_token_sends_400(self):
         """Authentication message missing 'token' field must send a 400 error response."""
@@ -266,6 +329,25 @@ class TestStateConsumer:
         payload = json.loads(kwargs['text_data'])
         assert payload == {'type': 'auth', 'statusCode': 400, 'error': 'error/missing-token'}
         consumer.close.assert_awaited_once()
+
+    def test_authenticate_denies_channel_without_permission_override(self):
+        consumer = StateConsumer()
+        consumer.context_channel_class = ContextChannel
+        consumer.scope = {'url_route': {'kwargs': {}}}
+
+        fake_token = SimpleNamespace(
+            key='abc123',
+            user=SimpleNamespace(id=7, is_authenticated=True),
+        )
+
+        with patch('rxdjango.consumers.Token.objects.get', return_value=fake_token):
+            with pytest.raises(ForbiddenError, match='error/forbidden'):
+                _run(consumer.authenticate('abc123'))
+
+    def test_is_visible_defaults_to_false(self):
+        channel = ContextChannel(SimpleNamespace(id=7))
+
+        assert _run(channel.is_visible(42)) is False
 
     def test_receive_action_missing_fields_with_call_id_sends_400(self):
         """Action message with callId but missing action/params should send a 400 error."""
@@ -309,3 +391,26 @@ class TestStateConsumer:
         assert payload['callId'] == 7
         assert payload['error']['code'] == 400
         assert 'params' in payload['error']['message'].lower()
+
+    def test_receive_write_unexpected_error_sends_generic_500_and_reraises(self):
+        consumer = StateConsumer()
+        consumer.send = AsyncMock()
+        consumer._handle_write_save = AsyncMock(side_effect=RuntimeError('table users leaked'))
+
+        with patch('rxdjango.consumers.logger') as mock_logger:
+            with pytest.raises(RuntimeError, match='table users leaked'):
+                _run(consumer.receive_write({
+                    'type': 'write',
+                    'writeId': 12,
+                    'operation': 'save',
+                }))
+
+        mock_logger.exception.assert_called_once_with('Write operation %s failed', 'save')
+        consumer.send.assert_awaited_once()
+        payload = json.loads(consumer.send.await_args.kwargs['text_data'])
+        assert payload == {
+            'type': 'writeResponse',
+            'writeId': 12,
+            'success': False,
+            'error': {'code': 500, 'message': 'Internal server error'},
+        }

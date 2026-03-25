@@ -260,12 +260,12 @@ class ContextChannel(metaclass=ContextChannelMeta):
     @staticmethod
     def has_permission(user: AbstractBaseUser, **kwargs: Any) -> bool:
         """Implement this method to check if user has permission on a channel"""
-        return NotImplemented
+        return False
 
     async def is_visible(self, instance_id: int) -> bool:
         """Implement this to check if a new instance should be added to this
         channel. You should check if user permission on instance"""
-        return NotImplemented
+        return False
 
     async def on_connect(self, tstamp: float | None) -> None:
         """Called after user has been authenticated.

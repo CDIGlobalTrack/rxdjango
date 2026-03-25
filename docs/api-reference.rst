@@ -726,14 +726,14 @@ Required Django Settings
 
    Redis connection URL.
 
-   Example: ``redis://127.0.0.1:6379/0``
+   Example: ``redis://:strong-password@127.0.0.1:6379/0``
 
 .. py:data:: MONGO_URL
    :type: str
 
    MongoDB connection URL.
 
-   Example: ``mongodb://localhost:27017/``
+   Example: ``mongodb://app-user:strong-password@127.0.0.1:27017/?authSource=admin``
 
 .. py:data:: MONGO_STATE_DB
    :type: str

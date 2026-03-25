@@ -1,5 +1,48 @@
 import importlib
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.apps import apps, AppConfig
+from django.core.checks import Warning, register
+
+
+def _url_has_credentials(url):
+    if not url:
+        return True
+
+    parsed = urlsplit(url)
+    return any(
+        value not in (None, '')
+        for value in (parsed.username, parsed.password)
+    )
+
+
+@register()
+def check_service_auth(app_configs, **kwargs):
+    warnings = []
+
+    if not _url_has_credentials(getattr(settings, 'MONGO_URL', '')):
+        warnings.append(Warning(
+            'MONGO_URL does not appear to include authentication credentials.',
+            hint=(
+                'Use an authenticated MongoDB URL in production, for example '
+                "'mongodb://app-user:strong-password@db.example.com:27017/"
+                "?authSource=admin'."
+            ),
+            id='rxdjango.W001',
+        ))
+
+    if not _url_has_credentials(getattr(settings, 'REDIS_URL', '')):
+        warnings.append(Warning(
+            'REDIS_URL does not appear to include authentication credentials.',
+            hint=(
+                'Use an authenticated Redis URL in production, for example '
+                "'redis://:strong-password@redis.example.com:6379/0'."
+            ),
+            id='rxdjango.W002',
+        ))
+
+    return warnings
 
 
 class RxDjangoConfig(AppConfig):
