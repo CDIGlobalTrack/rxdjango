@@ -6,6 +6,7 @@ import channels.layers
 from asgiref.sync import async_to_sync
 from collections import defaultdict
 from django.apps import AppConfig
+from django.conf import settings
 from django.db.models.signals import (pre_save, post_save,
                                       pre_delete, post_delete,
                                       post_migrate)
@@ -95,14 +96,30 @@ class SignalHandler:
             return
         self._setup = True
 
-        def init_cache_database(sender, **kwargs):
+        def on_post_migrate(sender, plan=None, **kwargs):
+            # Always ensure indexes exist, regardless of settings
+            self.mongo.ensure_indexes()
+
+            # Only clear cache if the setting is enabled (default True)
+            if not getattr(settings, 'RX_CLEAR_CACHE_ON_MIGRATE', True):
+                return
+
+            # Skip if no migrations were applied for this app
+            if plan is not None:
+                app_label = sender.label
+                has_migrations = any(
+                    migration.app_label == app_label
+                    for migration, rolled_back in plan
+                )
+                if not has_migrations:
+                    return
+
             self.state_model.clean_active()
-            self.mongo.init_database()
+            self.mongo.clear_cache()
             RedisSession.init_database(self.channel_class)
 
-        # Cache is deleted on every migrate
         post_migrate.connect(
-            init_cache_database,
+            on_post_migrate,
             sender=app_config,
             weak=False,
         )

@@ -272,10 +272,13 @@ class MongoSignalWriter:
         self.db = client[settings.MONGO_STATE_DB]
         self.collection = self.db[self.channel_class.__name__.lower()]
 
-    def init_database(self):
-        """Drop and recreate the collection with required indexes.
+    def ensure_indexes(self):
+        """Create required indexes if they don't already exist.
 
-        Called during ``post_migrate`` to reset the cache. Creates two indexes:
+        MongoDB's ``create_index`` is idempotent — if the index exists with
+        the same specification, it is a no-op. Safe to call on every startup.
+
+        Creates two indexes:
 
         - ``instance_pkey``: Composite unique index on (anchor_id, user_key,
           instance_type, id) for fast upserts and lookups.
@@ -284,8 +287,6 @@ class MongoSignalWriter:
         """
         if self.collection is None:
             self.connect()
-
-        self.collection.drop()
 
         self.collection.create_index(
             [
@@ -305,6 +306,28 @@ class MongoSignalWriter:
             ],
             name='reconnection_index',
         )
+
+    def clear_cache(self):
+        """Delete all cached documents from the collection.
+
+        Uses ``delete_many`` instead of ``collection.drop()`` to preserve
+        indexes. This avoids a window where queries run without indexes and
+        removes the need to recreate indexes after clearing.
+        """
+        if self.collection is None:
+            self.connect()
+
+        self.collection.delete_many({})
+
+    def init_database(self):
+        """Clear cache and ensure indexes exist.
+
+        Convenience method that combines :meth:`clear_cache` and
+        :meth:`ensure_indexes`. Kept for backward compatibility with test
+        setup code.
+        """
+        self.clear_cache()
+        self.ensure_indexes()
 
     def write_instances(self, anchor_id, instances):
         """Write instances to MongoDB and compute deltas for broadcasting.

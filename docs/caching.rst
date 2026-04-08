@@ -161,9 +161,49 @@ regardless of session count or TTL.
 Cache Clearing on Migrate
 =========================
 
-The cache is automatically cleared whenever ``python manage.py migrate`` is
-executed, via a ``post_migrate`` signal handler. This ensures that schema
-changes don't cause stale cached data to be served.
+By default, RxDjango clears the cache whenever ``python manage.py migrate``
+applies migrations to your apps. This ensures that serializer schema changes
+don't cause stale cached data to be served.
+
+The behavior is controlled by the ``RX_CLEAR_CACHE_ON_MIGRATE`` setting:
+
+.. code-block:: python
+
+   # settings.py — default, preserves existing behavior
+   RX_CLEAR_CACHE_ON_MIGRATE = True
+
+When ``True`` (the default), the cache is cleared only when the migration
+``plan`` actually includes migrations for the sender app — no-op runs of
+``migrate`` (nothing to apply) no longer trigger unnecessary cache wipes.
+
+Set to ``False`` to disable automatic clearing entirely and rely on the
+``clear_rxdjango_cache`` management command instead. This is recommended for
+zero-downtime deployments (blue/green, canary, rolling restarts) where the
+shared MongoDB/Redis cache must remain intact while the old deployment is
+still serving traffic.
+
+MongoDB indexes are always created or verified on ``post_migrate``, regardless
+of this setting, so they are never missing after a fresh database setup.
+
+clear_rxdjango_cache Command
+----------------------------
+
+The ``clear_rxdjango_cache`` management command gives operators explicit
+control over cache lifecycle:
+
+.. code-block:: bash
+
+   # Clear all channel caches
+   python manage.py clear_rxdjango_cache
+
+   # Clear a specific channel only
+   python manage.py clear_rxdjango_cache --channel myapp.MyContextChannel
+
+   # Preview what would be cleared (no changes made)
+   python manage.py clear_rxdjango_cache --dry-run
+
+After clearing, the cache is self-healing: the next client connection triggers
+a full state rebuild from the ORM.
 
 Delta Computation
 =================
