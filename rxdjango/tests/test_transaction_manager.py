@@ -53,6 +53,47 @@ class TestPendingBroadcast(unittest.TestCase):
         assert serialized['_tstamp'] == 1234567890.123
         assert serialized['_deleted'] is True
 
+    def test_delete_operation_without_preserialized_data_crashes(self):
+        """Delete with delete_serialized=None should not crash.
+
+        Reproduces the bug where broadcast_instance() creates a
+        PendingBroadcast for a delete operation without passing
+        delete_serialized, causing:
+          TypeError: 'NoneType' object does not support item assignment
+        """
+        mock_handler = Mock()
+        mock_handler._relay = Mock()
+
+        mock_state_model = Mock()
+        mock_state_model.serialize_delete_by_id = Mock(return_value={
+            'id': 417,
+            '_instance_type': 'test.TestSerializer',
+            '_tstamp': 1234567890.123,
+            '_operation': 'delete',
+            '_deleted': True,
+            '_user_key': None,
+        })
+
+        # This is the buggy case: delete operation without pre-serialized data
+        pending = PendingBroadcast(
+            model_class=Mock,
+            instance_id=417,
+            state_model=mock_state_model,
+            operation='delete',
+            # No anchors or delete_serialized passed - this is the bug
+        )
+
+        # This should NOT raise TypeError
+        pending.serialize_and_relay(mock_handler, tstamp=1234567890.123)
+
+        # Should still relay a delete broadcast
+        mock_handler._relay.assert_called_once()
+        call_args = mock_handler._relay.call_args
+        serialized = call_args[0][0]
+        assert serialized['id'] == 417
+        assert serialized['_tstamp'] == 1234567890.123
+        assert serialized['_deleted'] is True
+
     def test_update_operation_fetches_fresh_from_db(self):
         """Update operations should fetch fresh instance from DB."""
         mock_handler = Mock()

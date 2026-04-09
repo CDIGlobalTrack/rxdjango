@@ -58,8 +58,16 @@ class PendingBroadcast:
         """
         if self.operation == 'delete':
             # Use pre-computed serialized data for deletions
-            serialized = self.delete_serialized
-            serialized['_tstamp'] = tstamp
+            if self.delete_serialized is not None:
+                serialized = self.delete_serialized
+                serialized['_tstamp'] = tstamp
+            else:
+                # Fallback: delete_serialized wasn't provided (e.g. from
+                # broadcast_instance or parent-change scheduling).
+                # Build a minimal delete payload from what we have.
+                serialized = self.state_model.serialize_delete_by_id(
+                    self.instance_id, tstamp
+                )
             handler._relay(serialized, self.state_model, self.anchors)
             return
 

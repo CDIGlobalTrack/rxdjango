@@ -131,6 +131,12 @@ class StateModel:
         data['_operation'] = 'delete'
         return data
 
+    def serialize_delete_by_id(self, instance_id: int, tstamp: float) -> dict[str, Any]:
+        data = self._mark({'id': instance_id}, tstamp)
+        data['_deleted'] = True
+        data['_operation'] = 'delete'
+        return data
+
     def serialize_state(self, instance: Model, tstamp: float) -> Generator[list[dict[str, Any]], None, None]:
         if self.many:
             data = self.flat_serializer(instance.all(), many=True).data
