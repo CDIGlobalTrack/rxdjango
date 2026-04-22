@@ -12,6 +12,7 @@ from django.contrib.auth.models import AbstractBaseUser
 from rest_framework import serializers
 
 from .consumers import StateConsumer, get_consumer_methods
+from .state import ReactiveField, BatchContext, MISSING
 from .state_model import StateModel
 from .state_loader import StateLoader
 from .websocket_router import WebsocketRouter
@@ -121,6 +122,19 @@ class ContextChannelMeta(type):
         new_class._anchor_events_channel = f'{new_class.__name__}-anchor-events'
         new_class._consumer_methods = get_consumer_methods(new_class)
 
+        # Collect reactive fields declared on this class and its bases.
+        reactive_fields: dict[str, ReactiveField] = {}
+        for klass in reversed(new_class.__mro__):
+            for attr_name, attr_val in vars(klass).items():
+                if isinstance(attr_val, ReactiveField):
+                    # Capture annotation if not already set by __set_name__
+                    if not attr_val.name:
+                        attr_val.name = attr_name
+                    annotation = klass.__annotations__.get(attr_name)
+                    attr_val.annotation = annotation
+                    reactive_fields[attr_name] = attr_val
+        new_class.__reactive_fields__ = reactive_fields
+
         # Register this channel class for cache expiry scanning
         ContextChannel._registry.add(new_class)
 
@@ -140,7 +154,7 @@ class ContextChannel(metaclass=ContextChannelMeta):
     class Meta:
         abstract = True
 
-    RuntimeState = None
+    __reactive_fields__: ClassVar[dict[str, ReactiveField]] = {}
     _registry: ClassVar[set[type]] = set()
 
     @classmethod
@@ -161,9 +175,15 @@ class ContextChannel(metaclass=ContextChannelMeta):
         self.user = user
         self.user_id = user.id
         self._consumer = None  # will be set by consumer
-        self.runtime_state = self.RuntimeState() if self.RuntimeState else None
+        self._batch_stack: list[dict] = []
         self.anchor_ids: list[int] = []
         self.anchor_index: set[int] = set()
+
+        # Initialise reactive fields from their defaults.
+        for field_name, field in self.__reactive_fields__.items():
+            initial = field.initial_value()
+            if initial is not MISSING:
+                self.__dict__[field_name] = initial
 
     async def send(self, *args: Any, **kwargs: Any) -> None:
         """A proxy method to self._consumer.send"""
@@ -219,11 +239,30 @@ class ContextChannel(metaclass=ContextChannelMeta):
                     data = json_dumps(instances)
                     await self.send(text_data=data)
 
-    async def set_runtime_var(self, var: str, value: Any) -> None:
-        self.runtime_state[var] = value
-        payload = {'type': 'runtimeVar', 'var': var, 'value': value}
-        payload = json.dumps(payload)
+    async def _broadcast_field(self, name: str, value: Any) -> None:
+        """Send a single reactive field update to the connected client."""
+        payload = json.dumps({'type': 'runtimeVar', 'var': name, 'value': value}, default=str)
         await self.send(text_data=payload)
+
+    async def _broadcast_fields(self, fields: dict[str, Any]) -> None:
+        """Send a batched reactive field update to the connected client."""
+        payload = json.dumps({'type': 'runtimeVars', 'vars': fields}, default=str)
+        await self.send(text_data=payload)
+
+    def batch(self) -> BatchContext:
+        """Return an async context manager for atomic multi-field reactive updates.
+
+        Changes made inside the block are buffered and sent as a single
+        ``runtimeVars`` websocket message on exit. On exception, all
+        buffered changes are discarded and a warning is logged.
+
+        Usage::
+
+            async with self.batch():
+                self.mode = 'edit'
+                self.unread_count = 0
+        """
+        return BatchContext(self)
 
     @database_sync_to_async
     def serialize_instance(self, instance: Model, tstamp: float = 0) -> dict[str, Any]:

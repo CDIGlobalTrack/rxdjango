@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - TBD
+
+### Added
+- `rxdjango.state.reactive()` — declare reactive fields on `ContextChannel`
+  subclasses as ordinary class-level attributes with type annotations. Reads
+  and writes use plain attribute syntax (`self.count += 1`).
+- Auto-proxy for mutable container reactive fields (`list`, `dict`, `set`):
+  in-place mutations (`.append()`, `[key] = v`, `.add()`, `.clear()`, etc.)
+  broadcast automatically without requiring reassignment.
+- `ContextChannel.batch()` — async context manager for atomic multi-field
+  reactive updates. All changes inside the block are buffered and sent as a
+  single `runtimeVars` WebSocket message on exit.
+- `runtimeVars` wire message — new batch variant of `runtimeVar`, also sent
+  on initial connect with all reactive field defaults.
+- `_annotation_to_ts()` in the TypeScript generator — maps Python generic
+  annotations (`list[int]`, `dict[str, bool]`, `Optional[str]`) to TypeScript
+  types for the generated `RuntimeState` interface.
+
+### Breaking Changes
+- **Removed** `ContextChannel.RuntimeState` nested `TypedDict` class pattern.
+- **Removed** `ContextChannel.runtime_state` dict attribute.
+- **Removed** `ContextChannel.set_runtime_var(name, value)` async method.
+- Reactive state is per-connection and resets to defaults on reconnect.
+  It was previously also per-connection but had no explicit reset guarantee.
+
+### Migration
+Replace the old pattern:
+
+```python
+from typing import TypedDict
+from rxdjango.channels import ContextChannel
+
+class MyChannel(ContextChannel):
+    class RuntimeState(TypedDict):
+        notifications: int
+
+    async def some_handler(self, event):
+        n = self.runtime_state['notifications']
+        await self.set_runtime_var('notifications', n + 1)
+```
+
+With:
+
+```python
+from rxdjango.channels import ContextChannel
+from rxdjango.state import reactive
+
+class MyChannel(ContextChannel):
+    notifications: int = reactive(default=0)
+
+    async def some_handler(self, event):
+        self.notifications += 1
+```
+
+## [0.3.0] - unreleased
+
+### Changed (breaking)
+- **Reactive state API** — `RuntimeState` nested class, `runtime_state` dict,
+  and `set_runtime_var()` method have been removed. Replace them with
+  `reactive()` field declarations at the class level (see docs/using-rxdjango.rst).
+
+### Added
+- `rxdjango.state.reactive(default=…, default_factory=…)` — declare reactive
+  fields on a `ContextChannel` subclass as ordinary class-level attributes.
+  Reads and writes are plain attribute access; no dicts or method calls needed.
+- Auto-proxy for mutable containers: `list`, `dict`, and `set` reactive fields
+  are wrapped transparently so in-place mutations (`.append()`, `[k]=v`,
+  `.add()`, etc.) broadcast automatically.
+- `ContextChannel.batch()` — async context manager for atomic multi-field
+  updates. All writes inside the block are buffered and sent as a single
+  `runtimeVars` WebSocket message on exit. On exception, buffered changes
+  are discarded with transactional rollback semantics.
+- New `runtimeVars` WebSocket message type (plural) for batched updates and
+  for the initial reactive-state snapshot sent after connection.
+- `_annotation_to_ts()` in the TypeScript generator — handles generic
+  annotations (`list[int]`, `dict[str, bool]`, `Optional[X]`, etc.) for
+  reactive field interface generation.
+
 ## [0.0.44] - 2026-02-19
 
 ### Changed

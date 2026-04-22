@@ -409,4 +409,85 @@ describe('ContextChannel', () => {
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('99999'));
     consoleSpy.mockRestore();
   });
+
+  it('subscribeRuntimeState notifies on runtimeVars batch message', () => {
+    const channel = new TestChannel('token');
+    channel.runtimeState = {};
+    channel.setArgs({ projectId: 1 });
+    channel.subscribe(jest.fn());
+    jest.runAllTimers();
+    simulateAuth(channel);
+
+    const runtimeListener = jest.fn();
+    channel.subscribeRuntimeState(runtimeListener);
+
+    simulateMessage(channel, {
+      type: 'runtimeVars',
+      vars: { mode: 'edit', count: 5 },
+    });
+
+    expect(runtimeListener).toHaveBeenCalledTimes(1);
+    expect(runtimeListener).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: 'edit', count: 5 })
+    );
+  });
+
+  it('runtimeVars batch message merges with existing runtimeState', () => {
+    const channel = new TestChannel('token');
+    channel.runtimeState = { existing: 'value' } as any;
+    channel.setArgs({ projectId: 1 });
+    channel.subscribe(jest.fn());
+    jest.runAllTimers();
+    simulateAuth(channel);
+
+    const runtimeListener = jest.fn();
+    channel.subscribeRuntimeState(runtimeListener);
+
+    simulateMessage(channel, {
+      type: 'runtimeVars',
+      vars: { mode: 'edit' },
+    });
+
+    expect(runtimeListener).toHaveBeenCalledWith(
+      expect.objectContaining({ existing: 'value', mode: 'edit' })
+    );
+  });
+
+  it('runtimeVars batch triggers exactly one listener call per message', () => {
+    const channel = new TestChannel('token');
+    channel.runtimeState = {};
+    channel.setArgs({ projectId: 1 });
+    channel.subscribe(jest.fn());
+    jest.runAllTimers();
+    simulateAuth(channel);
+
+    const runtimeListener = jest.fn();
+    channel.subscribeRuntimeState(runtimeListener);
+
+    simulateMessage(channel, {
+      type: 'runtimeVars',
+      vars: { a: 1, b: 2, c: 3 },
+    });
+
+    // Three fields in one message must produce exactly one listener call.
+    expect(runtimeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('runtimeVar and runtimeVars both update the same runtimeState object', () => {
+    const channel = new TestChannel('token');
+    channel.runtimeState = {};
+    channel.setArgs({ projectId: 1 });
+    channel.subscribe(jest.fn());
+    jest.runAllTimers();
+    simulateAuth(channel);
+
+    const runtimeListener = jest.fn();
+    channel.subscribeRuntimeState(runtimeListener);
+
+    simulateMessage(channel, { type: 'runtimeVar', var: 'mode', value: 'edit' });
+    simulateMessage(channel, { type: 'runtimeVars', vars: { count: 3 } });
+
+    const finalState = runtimeListener.mock.calls[1][0];
+    expect(finalState).toMatchObject({ mode: 'edit', count: 3 });
+  });
 });

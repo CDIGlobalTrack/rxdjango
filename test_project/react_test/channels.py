@@ -3,12 +3,18 @@ from channels.db import database_sync_to_async
 from rxdjango.actions import action
 from rxdjango.channels import ContextChannel
 from rxdjango.operations import SAVE, CREATE, DELETE
+from rxdjango.state import reactive
 
 from .models import Asset, Job, Participant, Task
 from .serializers import JobNestedSerializer, TaskSerializer, AssetSerializer
 
 
 class JobContextChannel(ContextChannel):
+
+    # Reactive fields — per-connection ephemeral state
+    typing_users: list[int] = reactive(default_factory=list)
+    unread_count: int = reactive(default=0)
+    view_mode: str = reactive(default='view')
 
     class Meta:
         state = JobNestedSerializer()
@@ -83,6 +89,7 @@ class JobContextChannel(ContextChannel):
     @action
     async def delete_asset(self, asset_id: int) -> dict:
         return await database_sync_to_async(self._delete_asset)(asset_id)
+
     def _delete_asset(self, asset_id: int) -> dict:
         asset = Asset.objects.get(pk=asset_id, job_id=self.kwargs['job_id'])
         asset.delete()
@@ -90,4 +97,26 @@ class JobContextChannel(ContextChannel):
             'assetId': asset_id,
             'deleted': True,
         }
+
+    # --- Reactive state actions ---
+
+    @action
+    async def start_typing(self, user_id: int) -> dict:
+        if user_id not in self.typing_users:
+            self.typing_users.append(user_id)
+        return {'ok': True}
+
+    @action
+    async def stop_typing(self, user_id: int) -> dict:
+        if user_id in self.typing_users:
+            self.typing_users.remove(user_id)
+        return {'ok': True}
+
+    @action
+    async def mark_all_read_and_switch_to_edit(self) -> dict:
+        async with self.batch():
+            self.unread_count = 0
+            self.view_mode = 'edit'
+            self.typing_users.clear()
+        return {'ok': True}
 

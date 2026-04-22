@@ -53,8 +53,11 @@ Outgoing messages (server -> client)::
     {"type": "writeResponse", "writeId": <id>, "success": true}
     {"type": "writeResponse", "writeId": <id>, "success": false, "error": {"code": 403, "message": "..."}}
 
-    # Runtime state change
+    # Runtime state change (single field)
     {"type": "runtimeVar", "var": "varName", "value": ...}
+
+    # Runtime state change (batched, also sent on initial connect)
+    {"type": "runtimeVars", "vars": {"field1": ..., "field2": ...}}
 
     # System/maintenance broadcasts
     {"type": "system", "source": "system", "message": "..."}
@@ -225,6 +228,19 @@ class StateConsumer(AsyncWebsocketConsumer):
 
         for anchor_id in self.anchor_ids:
             await self._load_state(anchor_id, tstamp)
+
+        # Send initial reactive field values to the client.
+        if self.channel.__reactive_fields__:
+            initial = {
+                name: self.channel.__dict__.get(name)
+                for name in self.channel.__reactive_fields__
+                if name in self.channel.__dict__
+            }
+            if initial:
+                import json as _json
+                await self.send(text_data=_json.dumps(
+                    {'type': 'runtimeVars', 'vars': initial}, default=str
+                ))
 
     async def instances_list_add(self, event: dict[str, Any]) -> None:
         """Handle channel layer event for adding an instance to a many=True list.

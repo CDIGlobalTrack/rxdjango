@@ -135,12 +135,24 @@ denied even if ``can_*`` would return ``True``.
 
 See :ref:`optimistic-updates` for full documentation on write operations.
 
-RuntimeState class
-==================
+Reactive fields
+===============
 
-A class named `RuntimeState`, inheriting `typing.TypedDict`, may be declared
-inside the ContextChannel subclass. It's a flat dictionary, accessible through
-`self.runtime_state`. Its values can be changed using `set_runtime_var`.
+Reactive fields are declared at the class level using ``reactive()`` from
+``rxdjango.state``. They are read and written as ordinary attributes and
+broadcast automatically to the connected client.
+
+.. code-block:: python
+
+    from rxdjango.channels import ContextChannel
+    from rxdjango.state import reactive
+
+    class MyChannel(ContextChannel):
+
+        notifications: int = reactive(default=0)
+        typing_users: list[int] = reactive(default_factory=list)
+
+See :ref:`using-rxdjango` for full documentation and examples.
 
 Methods
 =======
@@ -356,17 +368,20 @@ get_registered_channels
 
 Returns the set of all registered ContextChannel subclasses.
 
-runtime_state
--------------
+batch
+-----
 
-This property is a dictionary, containing the runtime state of the application, in case the
-`RuntimeState` class has been defined. It should be updated using `set_runtime_var` method,
-so changes are relayed to the frontend.
+Returns an async context manager for atomic multi-field reactive updates.
+All field changes inside the block are buffered and sent as a single
+``runtimeVars`` WebSocket message on exit. On exception, buffered changes
+are discarded, field values remain at their pre-batch state, and a warning
+is logged.
 
-set_runtime_var
----------------
+.. code-block:: python
 
-This sets one runtime variable, which will be relayed to the frontend and updated there.
+    async with self.batch():
+        self.mode = 'edit'
+        self.unread_count = 0
 
 Serializer Meta Options
 =======================

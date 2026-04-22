@@ -146,6 +146,7 @@ export default class PersistentWebSocket {
           break;
 
         case 'runtimeVar':
+        case 'runtimeVars':
           this.onRuntimeStateChange(message);
           break;
 

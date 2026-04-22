@@ -99,10 +99,14 @@ abstract class ContextChannel<T, Y=unknown> {
     };
 
     ws.onRuntimeStateChange = (message) => {
-      const msg = message as { type: 'runtimeVar'; var: keyof Y; value: unknown };
-      const runtimeVar = msg.var;
-      const value = msg.value;
-      this.receiveRuntimeState(runtimeVar, value);
+      const msg = message as
+        | { type: 'runtimeVar'; var: keyof Y; value: unknown }
+        | { type: 'runtimeVars'; vars: Partial<Y> };
+      if (msg.type === 'runtimeVar') {
+        this.receiveRuntimeState(msg.var, msg.value);
+      } else {
+        this.receiveRuntimeStateBatch(msg.vars);
+      }
     };
 
     ws.onAnchorPrepend = (anchorId) => {
@@ -141,6 +145,11 @@ abstract class ContextChannel<T, Y=unknown> {
 
   private receiveRuntimeState(runtimeVar: keyof Y, value: unknown) {
     this.runtimeState = { ...this.runtimeState, [runtimeVar]: value } as Y;
+    this.notifyRuntimeState();
+  }
+
+  private receiveRuntimeStateBatch(vars: Partial<Y>) {
+    this.runtimeState = { ...this.runtimeState, ...vars } as Y;
     this.notifyRuntimeState();
   }
 

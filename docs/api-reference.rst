@@ -104,13 +104,19 @@ Base class for creating real-time channels.
 
       :param instance_id: ID of the instance to remove
 
-   .. py:method:: set_runtime_var(var, value)
-      :async:
+   .. py:method:: batch()
 
-      Set a runtime variable and push it to the connected client.
+      Returns an async context manager for atomic multi-field reactive updates.
+      All reactive field writes inside the block are buffered and emitted as a
+      single ``runtimeVars`` WebSocket message on successful exit. On exception,
+      all buffered changes are discarded (values stay at pre-batch state), a
+      warning is logged, and the exception propagates.
 
-      :param var: Variable name
-      :param value: Variable value (must be JSON-serializable)
+      .. code-block:: python
+
+          async with self.batch():
+              self.mode = 'edit'
+              self.unread_count = 0
 
    .. py:method:: send(*args, **kwargs)
       :async:
@@ -224,6 +230,46 @@ Base class for creating real-time channels.
        .. note:: The type must be declared with ``DELETE`` in ``Meta.writable``
           and the instance must belong to the channel's anchor context before
           this method is called.
+
+
+Reactive State (``rxdjango.state``)
+------------------------------------
+
+.. py:function:: reactive(default=MISSING, default_factory=MISSING)
+
+   Declare a reactive field on a :class:`ContextChannel` subclass.
+
+   Reactive fields are read and written as ordinary Python attributes.
+   Writes broadcast the new value to the connected client as a
+   ``runtimeVar`` WebSocket message. Mutable containers (``list``,
+   ``dict``, ``set``) are wrapped in transparent proxies so that in-place
+   mutations (``.append()``, ``[key] = v``, ``.add()``, etc.) also broadcast.
+
+   :param default: Default value for immutable fields (``int``, ``str``,
+                   ``bool``, ``float``, …).
+   :param default_factory: Zero-argument callable returning the default
+                           value. Use for mutable containers to avoid
+                           shared state between channel instances.
+
+   Exactly one of ``default`` / ``default_factory`` may be provided.
+   Providing neither is allowed; the field raises ``AttributeError`` on
+   read until its first write.
+
+   Reactive fields may only be written from an async context (inside a
+   ``@consumer``, ``@action``, or channel lifecycle method).
+   Writing from a sync context with no running event loop raises
+   ``RuntimeError``.
+
+   Example::
+
+       from rxdjango.channels import ContextChannel
+       from rxdjango.state import reactive
+
+       class MyChannel(ContextChannel):
+
+           count: int = reactive(default=0)
+           tags: set[str] = reactive(default_factory=set)
+           metadata: dict[str, str] = reactive(default_factory=dict)
 
 
 Decorators
@@ -473,7 +519,10 @@ ContextChannel
    WebSocket connection, authentication, state rebuilding, and RPC.
 
    :param T: Type of the root/anchor state
-   :param Y: Type of the runtime state (optional)
+   :param Y: Type of the reactive state. Inferred automatically from
+             ``reactive()`` field declarations on the Python channel class —
+             the TypeScript generator emits a ``<ChannelName>RuntimeState``
+             interface matching the Python annotations.
 
    .. js:method:: constructor(token)
 
