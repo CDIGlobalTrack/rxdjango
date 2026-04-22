@@ -13,6 +13,54 @@ from . import (header, interface_name, diff, get_ts_type, snake_to_camel,
 from .interfaces import mappings as _field_type_mappings
 
 
+def _annotation_to_ts(annotation: typing.Any) -> str:
+    """Convert a Python type annotation to a TypeScript type string.
+
+    Handles primitive scalars via TYPEMAP, plus generics such as
+    ``list[int]``, ``dict[str, bool]``, and ``set[str]``.
+    Falls back to ``any`` for unknown types.
+    """
+    if annotation is None or annotation is type(None):
+        return 'null'
+
+    # Plain primitives and well-known types
+    if annotation in TYPEMAP:
+        return TYPEMAP[annotation]
+
+    # Generics: list[X], set[X], dict[K, V]
+    origin = typing.get_origin(annotation)
+    args = typing.get_args(annotation)
+
+    if origin in (list, set):
+        inner = _annotation_to_ts(args[0]) if args else 'any'
+        return f'{inner}[]'
+
+    if origin is dict:
+        key_ts = _annotation_to_ts(args[0]) if args else 'string'
+        val_ts = _annotation_to_ts(args[1]) if len(args) > 1 else 'any'
+        return f'{{ [key: {key_ts}]: {val_ts} }}'
+
+    # Optional[X] / Union[X, None]
+    if origin is typing.Union:
+        non_none = [a for a in args if a is not type(None)]
+        has_none = any(a is type(None) for a in args)
+        ts_parts = [_annotation_to_ts(a) for a in non_none]
+        result = ' | '.join(ts_parts)
+        if has_none:
+            result += ' | null'
+        return result
+
+    # Bare list / dict / set without subscript
+    if annotation is list:
+        return 'any[]'
+    if annotation is set:
+        return 'any[]'
+    if annotation is dict:
+        return '{ [key: string]: any }'
+
+    return 'any'
+
+
 def create_app_channels(app, apply_changes=True, force=False):
     consumer_urlpatterns = list_consumer_patterns(app)
     if not consumer_urlpatterns:
@@ -521,7 +569,7 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
     if context_channel_class.many:
         state_type += '[]'
 
-    if getattr(context_channel_class, 'RuntimeState', False):
+    if context_channel_class.__reactive_fields__:
         runtime_type = f'{context_channel_class.__name__}RuntimeState'
         types = f'{state_type}, {runtime_type}'
     else:
@@ -549,13 +597,16 @@ def generate_ts_class(context_channel_class, urlpattern, import_types):
 
     if runtime_type:
         code.append(f'  runtimeState: {runtime_type} | undefined')
-        types = typing.get_type_hints(context_channel_class.RuntimeState)
+        field_types = {
+            fname: _annotation_to_ts(field.annotation)
+            for fname, field in context_channel_class.__reactive_fields__.items()
+        }
 
         code = [
             f"export interface {runtime_type} {{"
         ] + [
-            f"  {var}: {TYPEMAP[_type]};"
-            for var, _type in types.items()
+            f"  {var}: {ts_type};"
+            for var, ts_type in field_types.items()
         ] + [
             "}\n"
         ] + code

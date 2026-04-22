@@ -202,49 +202,82 @@ The `group_add` works like in a Django Channels consumer.
 See `Channels Layers documentation <https://channels.readthedocs.io/en/stable/topics/channel_layers.html>`_
 for information on how to send messages to groups and general consumer functionality.
 
-Runtime State
--------------
+Reactive State
+--------------
 
-A `ContextChannel` can have a runtime state, which is a dictionary in the python
-class that is automatically relayed to the frontend. The runtime state persists
-for one websocket connection.
+A ``ContextChannel`` can declare reactive fields that are automatically
+synchronized to all connected clients over the WebSocket. Reactive state
+persists for one WebSocket connection and resets to its defaults on reconnect.
 
-Declare the RuntimeState class, extending TypedDict, to create a runtime state.
-The TypedDict is required so that proper typescript interfaces can be generated:
-
-.. code-block:: python
-
-    from typing import TypedDict
-    from rxdjango.channels import ContextChannel
-
-    class MyChannel(ContextChannel):
-
-        class RuntimeState(TypedDict):
-            some_number_var: int
-            some_bool_var: bool
-
-The runtime state is accessible as `self.runtime_state` in the ContextChannel.
-To change the runtime state, use the `set_runtime_var`. In the example below,
-a consumer is used to change a runtime variable.
+Declare reactive fields at the class level using ``reactive()``:
 
 .. code-block:: python
 
-    from typing import TypedDict
     from rxdjango.channels import ContextChannel
+    from rxdjango.state import reactive
 
     class MyChannel(ContextChannel):
 
-        class RuntimeState(TypedDict):
-            notifications: int
+        notifications: int = reactive(default=0)
+        mode: str = reactive(default='view')
+        typing_users: list[int] = reactive(default_factory=list)
+        metadata: dict[str, str] = reactive(default_factory=dict)
 
-        @consumer('new.notification')
-        def relay_notification(self, event):
-            notifications = self.runtime_state['notifications']
-            self.set_runtime_var('notifications', notifications + 1)
+Read and write reactive fields as ordinary attributes. Writes broadcast
+automatically to the connected client:
 
-On the frontend side, `runtimeState` is one more key returned by
-`useChannelState`. You also need to import and provide the type of
-the runtime state:
+.. code-block:: python
+
+    from rxdjango.channels import ContextChannel
+    from rxdjango.state import reactive
+    from rxdjango.actions import action
+
+    class MyChannel(ContextChannel):
+
+        notifications: int = reactive(default=0)
+        typing_users: list[int] = reactive(default_factory=list)
+
+        @action
+        async def notify(self) -> dict:
+            self.notifications += 1           # broadcasts runtimeVar
+            return {'ok': True}
+
+        @action
+        async def start_typing(self, user_id: int) -> dict:
+            if user_id not in self.typing_users:
+                self.typing_users.append(user_id)  # broadcasts via auto-proxy
+            return {'ok': True}
+
+**Mutable containers** (``list``, ``dict``, ``set``) are wrapped in
+transparent proxies on first read. In-place mutations such as
+``.append()``, ``.pop()``, ``[key] = value``, ``.add()``, and ``.clear()``
+all broadcast automatically. You do not need to reassign the field.
+
+Use ``async with self.batch():`` to send multiple field changes in a single
+WebSocket message:
+
+.. code-block:: python
+
+        @action
+        async def reset(self) -> dict:
+            async with self.batch():
+                self.notifications = 0
+                self.mode = 'view'
+                self.typing_users.clear()
+            # one runtimeVars message with all three changes
+            return {'ok': True}
+
+If an exception is raised inside ``batch()``, all buffered changes are
+discarded — no message is sent and all field values remain at their
+pre-batch state. The exception propagates normally and a warning is logged.
+
+Reactive fields may only be written from an async context (a ``@consumer``,
+``@action``, or channel lifecycle method). Writing from a sync context with
+no running event loop raises ``RuntimeError``.
+
+On the frontend side, ``runtimeState`` is one more key returned by
+``useChannelState``. The TypeScript interface is generated automatically
+from your field type annotations:
 
 .. code-block:: typescript
 

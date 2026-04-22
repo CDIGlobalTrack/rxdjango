@@ -167,6 +167,20 @@ describe('PersistentWebSocket', () => {
     expect(onRuntime).toHaveBeenCalledWith({ type: 'runtimeVar', var: 'mode', value: 'edit' });
   });
 
+  it('routes runtimeVars batch messages', () => {
+    const ws = createWs();
+    const onRuntime = jest.fn();
+    ws.onRuntimeStateChange = onRuntime;
+    ws.connect();
+    jest.runAllTimers();
+
+    const socket = getSocket(ws);
+    socket.onmessage!({ data: JSON.stringify({ type: 'auth', statusCode: 200 }) });
+    socket.onmessage!({ data: JSON.stringify({ type: 'runtimeVars', vars: { mode: 'edit', count: 3 } }) });
+
+    expect(onRuntime).toHaveBeenCalledWith({ type: 'runtimeVars', vars: { mode: 'edit', count: 3 } });
+  });
+
   it('routes initialAnchors message', () => {
     const ws = createWs();
     const onAnchors = jest.fn();
